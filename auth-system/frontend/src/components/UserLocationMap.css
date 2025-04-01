@@ -1,0 +1,148 @@
+.map-container {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background-color: white;
+  margin-bottom: 2rem;
+}
+
+.map-header {
+  padding: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.map-header h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.map-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.map-loading {
+  height: 500px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  color: #666;
+  font-size: 1.2rem;
+}
+
+.no-location-data {
+  padding: 2rem;
+  text-align: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+/* Custom markers styling */
+.custom-div-icon {
+  background: transparent;
+  border: none;
+}
+
+.marker-pin {
+  width: 30px;
+  height: 30px;
+  border-radius: 50% 50% 50% 0;
+  background: #c30b82;
+  position: absolute;
+  transform: rotate(-45deg);
+  left: 50%;
+  top: 50%;
+  margin: -15px 0 0 -15px;
+}
+
+.marker-pin::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  margin: 3px 0 0 3px;
+  background: #fff;
+  position: absolute;
+  border-radius: 50%;
+}
+
+.marker-pin.current-user {
+  background: #4a90e2;
+}
+
+.marker-pin.other-user {
+  background: #dc3545;
+}
+
+/* Popup styling */
+.user-popup {
+  min-width: 150px;
+  text-align: center;
+}
+
+.user-popup h3 {
+  margin: 0 0 5px 0;
+  font-size: 1.1rem;
+}
+
+.user-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #28a745;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.user-location {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.current-user-tag {
+  font-style: italic;
+  color: #4a90e2;
+  font-size: 0.85rem;
+  margin-top: 5px;
+}
+
+.map-legend {
+  padding: 0.75rem 1rem;
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  border-top: 1px solid #eee;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+}
+
+.legend-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.legend-marker.current-user {
+  background-color: #4a90e2;
+}
+
+.legend-marker.other-user {
+  background-color: #dc3545;
+}

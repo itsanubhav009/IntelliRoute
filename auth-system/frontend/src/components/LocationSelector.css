@@ -1,0 +1,147 @@
+.location-selector {
+  width: 100%;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.location-selector-header {
+  margin-bottom: 1.5rem;
+}
+
+.location-selector-header h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.location-selector-header p {
+  margin: 0;
+  color: #666;
+}
+
+.message {
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.message.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.message.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.current-location-status {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.current-location-status h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.current-location-info p {
+  margin: 0.25rem 0;
+}
+
+.location-timestamp {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.no-location {
+  font-style: italic;
+  color: #999;
+}
+
+.location-search {
+  margin-bottom: 1rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.locations-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.location-item {
+  padding: 1rem;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.location-item:last-child {
+  border-bottom: none;
+}
+
+.location-item:hover {
+  background-color: #f8f9fa;
+}
+
+.location-item.selected {
+  background-color: #e3f2fd;
+  border-left: 4px solid #4a90e2;
+}
+
+.location-item h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.location-item p {
+  margin: 0 0 0.5rem 0;
+  color: #666;
+}
+
+.coordinates {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.location-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.update-button {
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.update-button:hover {
+  background-color: #357abf;
+}
+
+.update-button:disabled {
+  background-color: #b3d3f4;
+  cursor: not-allowed;
+}
