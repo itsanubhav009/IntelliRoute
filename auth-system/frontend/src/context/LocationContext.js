@@ -8,25 +8,21 @@ export const LocationProvider = ({ children }) => {
   const { isAuthenticated } = useContext(AuthContext);
   const [position, setPosition] = useState(null);
   const [liveUsers, setLiveUsers] = useState([]);
+  const [livePaths, setLivePaths] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  // Function to manually update user's location
+  // Update user's location
   const updateLocation = async (latitude, longitude) => {
     if (!isAuthenticated) return;
-
     try {
       const response = await api.post('/location/update', { latitude, longitude });
-      
-      // Update position state with timestamp
       setPosition({ 
         latitude, 
         longitude, 
         lastUpdated: new Date() 
       });
-
       // Also update online status
       await updateOnlineStatus(true);
-
       return response.data;
     } catch (error) {
       console.error('Failed to update location on server:', error);
@@ -37,7 +33,6 @@ export const LocationProvider = ({ children }) => {
   // Update online status
   const updateOnlineStatus = async (isOnline) => {
     if (!isAuthenticated) return;
-    
     try {
       await api.post('/location/status', { isOnline });
     } catch (error) {
@@ -45,10 +40,9 @@ export const LocationProvider = ({ children }) => {
     }
   };
 
-  // Fetch all live users
+  // Fetch live user locations
   const fetchLiveUsers = async () => {
     if (!isAuthenticated) return [];
-    
     setLoadingUsers(true);
     try {
       const response = await api.get('/location/live');
@@ -62,12 +56,37 @@ export const LocationProvider = ({ children }) => {
     }
   };
 
-  // Update online status when user logs in
+  // New function: Update both source and destination by setting a path.
+  const updatePath = async (source, destination) => {
+    if (!isAuthenticated) return;
+    try {
+      const response = await api.post('/path/set', { source, destination });
+      // Optionally update live paths
+      setLivePaths(response.data.livePaths || []);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to set path:', error);
+      return null;
+    }
+  };
+
+  // Fetch live user paths from backend
+  const fetchLivePaths = async () => {
+    if (!isAuthenticated) return [];
+    try {
+      const response = await api.get('/path/live');
+      setLivePaths(response.data.data || []);
+      return response.data.data;
+    } catch (error) {
+      console.error('Failed to fetch live paths:', error);
+      return [];
+    }
+  };
+
+  // When user logs in, update online status and try to load existing location from profile.
   useEffect(() => {
     if (isAuthenticated) {
       updateOnlineStatus(true);
-      
-      // Check if we have saved location data
       const fetchProfile = async () => {
         try {
           const response = await api.get('/auth/profile');
@@ -82,7 +101,6 @@ export const LocationProvider = ({ children }) => {
           console.error('Error fetching profile:', error);
         }
       };
-      
       fetchProfile();
     } else {
       updateOnlineStatus(false);
@@ -90,17 +108,10 @@ export const LocationProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // Handle beforeunload event to update offline status
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      updateOnlineStatus(false);
-    };
-
+    const handleBeforeUnload = () => updateOnlineStatus(false);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
   return (
@@ -108,10 +119,13 @@ export const LocationProvider = ({ children }) => {
       value={{
         position,
         liveUsers,
+        livePaths,
         loadingUsers,
         updateLocation,
         updateOnlineStatus,
-        fetchLiveUsers
+        fetchLiveUsers,
+        updatePath,
+        fetchLivePaths
       }}
     >
       {children}
