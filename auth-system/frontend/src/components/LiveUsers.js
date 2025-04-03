@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { LocationContext } from '../context/LocationContext';
+import { AuthContext } from '../context/AuthContext';
 import './LiveUsers.css';
 
 const LiveUsers = () => {
   const { liveUsers, loadingUsers, fetchLiveUsers } = useContext(LocationContext);
-  const [refreshInterval, setRefreshInterval] = useState(null);
-
+  const { user } = useContext(AuthContext);
+  const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds default
+  
   useEffect(() => {
     // Initial fetch
     fetchLiveUsers();
@@ -13,17 +15,11 @@ const LiveUsers = () => {
     // Set up auto-refresh
     const intervalId = setInterval(() => {
       fetchLiveUsers();
-    }, 200000); // Refresh every 10 seconds
-    
-    setRefreshInterval(intervalId);
+    }, refreshInterval);
     
     // Cleanup
-    return () => {
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-      }
-    };
-  }, []);
+    return () => clearInterval(intervalId);
+  }, [refreshInterval]);
 
   const formatLastActive = (timestamp) => {
     if (!timestamp) return 'Unknown';
@@ -37,8 +33,11 @@ const LiveUsers = () => {
     } else if (diffSeconds < 3600) {
       const minutes = Math.floor(diffSeconds / 60);
       return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    } else if (diffSeconds < 86400) {
+      const hours = Math.floor(diffSeconds / 3600);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
     } else {
-      return date.toLocaleTimeString();
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     }
   };
 
@@ -46,14 +45,36 @@ const LiveUsers = () => {
     fetchLiveUsers();
   };
 
+  const changeRefreshInterval = (interval) => {
+    setRefreshInterval(interval);
+  };
+
   return (
     <div className="live-users-container">
       <div className="live-users-header">
         <h2>Live Users ({liveUsers.length})</h2>
         <div className="refresh-control">
-          <button onClick={handleRefresh} disabled={loadingUsers}>
+          <button 
+            onClick={handleRefresh} 
+            disabled={loadingUsers}
+            className="refresh-button"
+          >
             {loadingUsers ? 'Refreshing...' : 'Refresh Now'}
           </button>
+          
+          <div className="refresh-interval">
+            <span>Auto-refresh: </span>
+            <select 
+              value={refreshInterval} 
+              onChange={(e) => changeRefreshInterval(Number(e.target.value))}
+            >
+              <option value={10000}>10 seconds</option>
+              <option value={30000}>30 seconds</option>
+              <option value={60000}>1 minute</option>
+              <option value={300000}>5 minutes</option>
+            </select>
+          </div>
+          
           <span className="last-updated">
             Last updated: {new Date().toLocaleTimeString()}
           </span>
@@ -66,28 +87,50 @@ const LiveUsers = () => {
         <p className="no-users-message">No users are currently online</p>
       ) : (
         <div className="live-users-list">
-          {liveUsers.map((user) => (
-            <div key={user.id} className="user-card">
-              <div className="user-avatar">
-                {user.username.charAt(0).toUpperCase()}
+          {liveUsers.map((userItem) => (
+            <div 
+              key={userItem.id} 
+              className={`user-card ${userItem.id === user?.id ? 'current-user' : ''}`}
+            >
+              <div 
+                className="user-avatar"
+                style={{ 
+                  backgroundColor: userItem.id === user?.id ? '#4285F4' : '#FF5722'
+                }}
+              >
+                {userItem.username.charAt(0).toUpperCase()}
               </div>
               <div className="user-info">
-                <span className="username">{user.username}</span>
-                <div className="user-status">
-                  <span className="status-dot"></span>
-                  <span>Online</span>
+                <div className="user-name-status">
+                  <span className="username">
+                    {userItem.username}
+                    {userItem.id === user?.id && (
+                      <span className="self-indicator"> (You)</span>
+                    )}
+                  </span>
+                  <div className="user-status">
+                    <span className="status-dot"></span>
+                    <span>Online</span>
+                  </div>
                 </div>
+                
                 <div className="user-details">
-                  <span>Last active: {formatLastActive(user.last_active)}</span>
+                  <span className="last-active">
+                    Last active: {formatLastActive(userItem.last_active)}
+                  </span>
                   
-                  {user.latitude && user.longitude ? (
-                    <div className="location-link">
+                  {userItem.latitude && userItem.longitude ? (
+                    <div className="location-info">
+                      <span className="coordinates">
+                        {userItem.latitude.toFixed(4)}, {userItem.longitude.toFixed(4)}
+                      </span>
                       <a 
-                        href={`https://www.google.com/maps?q=${user.latitude},${user.longitude}`}
+                        href={`https://www.google.com/maps?q=${userItem.latitude},${userItem.longitude}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        className="view-map-link"
                       >
-                        View on Map
+                        View on Google Maps
                       </a>
                     </div>
                   ) : (

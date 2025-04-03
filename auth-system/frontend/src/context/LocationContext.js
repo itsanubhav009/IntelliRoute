@@ -5,114 +5,103 @@ import { AuthContext } from './AuthContext';
 export const LocationContext = createContext();
 
 export const LocationProvider = ({ children }) => {
-  const { isAuthenticated } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const [position, setPosition] = useState(null);
   const [liveUsers, setLiveUsers] = useState([]);
   const [livePaths, setLivePaths] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Update user's location
+  // Update the user's location
   const updateLocation = async (latitude, longitude) => {
-    if (!isAuthenticated) return;
+    if (!user) return;
+    
     try {
       const response = await api.post('/location/update', { latitude, longitude });
-      setPosition({ 
-        latitude, 
-        longitude, 
-        lastUpdated: new Date() 
-      });
-      // Also update online status
-      await updateOnlineStatus(true);
+      setPosition({ latitude, longitude });
       return response.data;
     } catch (error) {
-      console.error('Failed to update location on server:', error);
-      return null;
+      console.error('Error updating location:', error);
+      setError('Failed to update location');
+      throw error;
     }
   };
 
-  // Update online status
-  const updateOnlineStatus = async (isOnline) => {
-    if (!isAuthenticated) return;
+  // Create a path between source and destination
+  const createPath = async (source, destination) => {
+    if (!user) return;
+    
     try {
-      await api.post('/location/status', { isOnline });
+      // Generate WKT LINESTRING
+      const routeWKT = `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
+      
+      const response = await api.post('/path/set', {
+        source,
+        destination,
+        routeWKT
+      });
+      
+      // Refresh paths after creating a new one
+      await fetchLivePaths();
+      
+      return response.data;
     } catch (error) {
-      console.error('Failed to update online status:', error);
+      console.error('Error creating path:', error);
+      setError('Failed to create path');
+      throw error;
     }
   };
 
-  // Fetch live user locations
+  // Fetch all active users' locations
   const fetchLiveUsers = async () => {
-    if (!isAuthenticated) return [];
-    setLoadingUsers(true);
     try {
       const response = await api.get('/location/live');
       setLiveUsers(response.data.data || []);
       return response.data.data;
     } catch (error) {
-      console.error('Failed to fetch live users:', error);
-      return [];
-    } finally {
-      setLoadingUsers(false);
+      console.error('Error fetching live users:', error);
+      setError('Failed to fetch users');
+      throw error;
     }
   };
 
-  // New function: Update both source and destination by setting a path.
-  const updatePath = async (source, destination) => {
-    if (!isAuthenticated) return;
-    try {
-      const response = await api.post('/path/set', { source, destination });
-      // Optionally update live paths
-      setLivePaths(response.data.livePaths || []);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to set path:', error);
-      return null;
-    }
-  };
-
-  // Fetch live user paths from backend
+  // Fetch all paths
   const fetchLivePaths = async () => {
-    if (!isAuthenticated) return [];
     try {
       const response = await api.get('/path/live');
       setLivePaths(response.data.data || []);
       return response.data.data;
     } catch (error) {
-      console.error('Failed to fetch live paths:', error);
-      return [];
+      console.error('Error fetching paths:', error);
+      setError('Failed to fetch paths');
+      throw error;
     }
   };
 
-  // When user logs in, update online status and try to load existing location from profile.
-  useEffect(() => {
-    if (isAuthenticated) {
-      updateOnlineStatus(true);
-      const fetchProfile = async () => {
-        try {
-          const response = await api.get('/auth/profile');
-          if (response.data.latitude && response.data.longitude) {
-            setPosition({
-              latitude: response.data.latitude,
-              longitude: response.data.longitude,
-              lastUpdated: response.data.location_updated_at || new Date()
-            });
-          }
-        } catch (error) {
-          console.error('Error fetching profile:', error);
+  // Get browser geolocation
+  const getCurrentPosition = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setPosition({ latitude, longitude });
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setError('Failed to get location');
         }
-      };
-      fetchProfile();
+      );
     } else {
-      updateOnlineStatus(false);
-      setPosition(null);
+      setError('Geolocation is not supported by this browser');
     }
-  }, [isAuthenticated]);
+  };
 
+  // Get current location when component mounts
   useEffect(() => {
-    const handleBeforeUnload = () => updateOnlineStatus(false);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+    if (user) {
+      getCurrentPosition();
+    }
+  }, [user]);
 
   return (
     <LocationContext.Provider
@@ -120,12 +109,13 @@ export const LocationProvider = ({ children }) => {
         position,
         liveUsers,
         livePaths,
-        loadingUsers,
+        isLoading,
+        error,
         updateLocation,
-        updateOnlineStatus,
+        createPath,
         fetchLiveUsers,
-        updatePath,
-        fetchLivePaths
+        fetchLivePaths,
+        getCurrentPosition
       }}
     >
       {children}

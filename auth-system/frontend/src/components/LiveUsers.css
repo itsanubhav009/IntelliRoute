@@ -1,154 +1,217 @@
 .live-users-container {
-  width: 100%;
-  max-width: 800px;
-  background-color: white;
+  padding: 20px;
+  background-color: #f5f5f5;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .live-users-header {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
 .live-users-header h2 {
   margin: 0;
   color: #333;
-  text-align: center;
+  font-size: 24px;
 }
 
 .refresh-control {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
 }
 
-.refresh-control button {
-  background-color: #4a90e2;
+.refresh-button {
+  padding: 8px 16px;
+  background-color: #4285F4;
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-weight: 500;
   transition: background-color 0.2s;
 }
 
-.refresh-control button:hover {
-  background-color: #357abf;
+.refresh-button:hover {
+  background-color: #3367d6;
 }
 
-.refresh-control button:disabled {
-  background-color: #b3d3f4;
+.refresh-button:disabled {
+  background-color: #a1c0f7;
   cursor: not-allowed;
 }
 
+.refresh-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #555;
+}
+
+.refresh-interval select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #333;
+}
+
 .last-updated {
-  font-size: 0.8rem;
-  color: #666;
+  font-size: 14px;
+  color: #777;
 }
 
 .live-users-loading {
+  padding: 40px;
   text-align: center;
-  padding: 2rem;
+  font-size: 16px;
   color: #666;
 }
 
 .no-users-message {
+  padding: 20px;
   text-align: center;
-  padding: 2rem;
+  font-size: 16px;
   color: #666;
-  font-style: italic;
+  background-color: #fff;
+  border-radius: 6px;
+  margin-top: 20px;
 }
 
 .live-users-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
 }
 
 .user-card {
   display: flex;
-  align-items: center;
-  padding: 1rem;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 15px;
+  background-color: white;
   border-radius: 8px;
-  background-color: #f8f9fa;
-  transition: all 0.2s ease;
-  border-left: 4px solid #4a90e2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.user-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+.user-card.current-user {
+  background-color: #e8f0fe;
+  border: 1px solid #c6dafc;
 }
 
 .user-avatar {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background-color: #4a90e2;
+  background-color: #4285F4;
   color: white;
   display: flex;
-  justify-content: center;
   align-items: center;
-  font-size: 1.5rem;
+  justify-content: center;
+  font-size: 20px;
   font-weight: bold;
-  margin-right: 1rem;
-  flex-shrink: 0;
 }
 
 .user-info {
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.user-name-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .username {
-  font-weight: 600;
-  font-size: 1.1rem;
-  margin-bottom: 0.25rem;
+  font-weight: 500;
+  color: #333;
+  font-size: 16px;
+}
+
+.self-indicator {
+  font-size: 12px;
+  color: #4285F4;
+  font-weight: normal;
 }
 
 .user-status {
   display: flex;
   align-items: center;
-  margin-bottom: 0.5rem;
+  gap: 6px;
+  font-size: 12px;
+  color: #4CAF50;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
-  background-color: #28a745;
   border-radius: 50%;
-  margin-right: 0.5rem;
+  background-color: #4CAF50;
 }
 
 .user-details {
-  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
   color: #666;
 }
 
-.location-link {
-  margin-top: 0.5rem;
+.last-active {
+  color: #777;
 }
 
-.location-link a {
-  color: #4a90e2;
+.location-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.coordinates {
+  font-family: monospace;
+  color: #555;
+}
+
+.view-map-link {
+  color: #4285F4;
   text-decoration: none;
-  font-size: 0.9rem;
-  display: inline-flex;
-  align-items: center;
+  font-size: 12px;
+  display: inline-block;
+  margin-top: 4px;
 }
 
-.location-link a:hover {
+.view-map-link:hover {
   text-decoration: underline;
 }
 
 .no-location {
   font-style: italic;
   color: #999;
-  font-size: 0.85rem;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .live-users-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .refresh-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .live-users-list {
+    grid-template-columns: 1fr;
+  }
 }

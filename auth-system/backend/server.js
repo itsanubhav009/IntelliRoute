@@ -1,22 +1,25 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const pathRoutes = require('./routes/pathRoutes');
+const locationRoutes = require('./routes/locationRoutes');
 require('dotenv').config();
 
 // Initialize app
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// IMPORTANT: Set up middleware BEFORE routes
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Routes
+// THEN add routes
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/location', require('./routes/locationRoutes')); // Add location routes
-app.use('/api/path', require('./routes/path'));
+app.use('/api/path', pathRoutes);
+app.use('/api/location', locationRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

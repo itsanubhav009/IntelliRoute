@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { LocationContext } from '../context/LocationContext';
 import { AuthContext } from '../context/AuthContext';
 import L from 'leaflet';
@@ -19,44 +19,114 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Create custom icons
+const createCustomIcon = (color) => {
+  return L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div class="marker-pin" style="background-color: ${color};"></div>`,
+    iconSize: [30, 42],
+    iconAnchor: [15, 42]
+  });
+};
+
 // Component to update map bounds based on users' positions
-function MapBoundsUpdater({ users }) {
+function MapBoundsUpdater({ users, paths }) {
   const map = useMap();
   
   useEffect(() => {
-    if (users.length > 0) {
-      const bounds = L.latLngBounds(users.map(user => [user.latitude, user.longitude]));
-      map.fitBounds(bounds, { padding: [50, 50] });
+    if (!users.length && !paths.length) return;
+    
+    try {
+      // Collect all points from users and paths
+      const points = [];
+      
+      // Add user points
+      users.forEach(user => {
+        if (user.latitude && user.longitude) {
+          points.push([user.latitude, user.longitude]);
+        }
+      });
+      
+      // Add path points
+      paths.forEach(path => {
+        if (path.parsedRoute && Array.isArray(path.parsedRoute)) {
+          path.parsedRoute.forEach(point => {
+            if (Array.isArray(point) && point.length >= 2) {
+              points.push([point[0], point[1]]);
+            }
+          });
+        }
+      });
+      
+      if (points.length > 0) {
+        const bounds = L.latLngBounds(points);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    } catch (error) {
+      console.error('Error updating map bounds:', error);
     }
-  }, [users, map]);
+  }, [users, paths, map]);
   
   return null;
 }
 
-// Helper to parse route data in either WKT LINESTRING or JSON format
+// Component to handle map clicks for route creation
+function MapClickHandler({ routeMode, selectedSource, setSelectedSource, createPath }) {
+  useMapEvents({
+    click: (e) => {
+      if (!routeMode) return;
+      
+      const { lat, lng } = e.latlng;
+      
+      if (!selectedSource) {
+        // Set source
+        setSelectedSource({ lat, lng });
+      } else {
+        // Set destination and create path
+        const destination = { lat, lng };
+        createPath(selectedSource, destination);
+        
+        // Reset route mode (this will be handled by parent component)
+      }
+    }
+  });
+  
+  return null;
+}
+
+// Helper to parse route data from PostGIS
 const parseRouteData = (routeData) => {
   if (!routeData) return [];
   
   // Check if it's a WKT LINESTRING
   if (typeof routeData === 'string' && routeData.startsWith('LINESTRING')) {
-    // Parse the LINESTRING(lng lat, lng lat, ...) format
-    const coordsStr = routeData.substring(11, routeData.length - 1);
-    return coordsStr.split(',').map(pair => {
-      const [lng, lat] = pair.trim().split(' ');
-      return [parseFloat(lat), parseFloat(lng)];
-    });
+    try {
+      // Parse the LINESTRING(lng lat, lng lat, ...) format
+      const coordsStr = routeData.substring(11, routeData.length - 1);
+      return coordsStr.split(',').map(pair => {
+        const [lng, lat] = pair.trim().split(' ');
+        return [parseFloat(lat), parseFloat(lng)]; // Leaflet uses [lat, lng]
+      });
+    } catch (e) {
+      console.error('Error parsing LINESTRING:', e);
+      return [];
+    }
   }
   
-  // Check if it's a JSON string
-  if (typeof routeData === 'string' && (routeData.startsWith('[') || routeData.startsWith('{'))) {
+  // If it's already an array, return it directly (assumed to be in [lat, lng] format)
+  if (Array.isArray(routeData)) {
+    return routeData;
+  }
+  
+  // Try to parse as JSON
+  if (typeof routeData === 'string') {
     try {
       const parsed = JSON.parse(routeData);
-      // Handle array of {lat, lng} objects
       if (Array.isArray(parsed)) {
-        return parsed.map(point => [point.lat, point.lng]);
+        return parsed;
       }
     } catch (e) {
-      console.error('Error parsing JSON route data:', e);
+      // Not valid JSON, ignore
     }
   }
   
@@ -64,29 +134,26 @@ const parseRouteData = (routeData) => {
 };
 
 const UserLocationMap = () => {
-  const { liveUsers, fetchLiveUsers, livePaths, fetchLivePaths } = useContext(LocationContext);
+  const { liveUsers, fetchLiveUsers, livePaths, fetchLivePaths, createPath } = useContext(LocationContext);
   const { user } = useContext(AuthContext);
   const [usersWithLocation, setUsersWithLocation] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
+  const [pathsWithCoordinates, setPathsWithCoordinates] = useState([]);
+  const [routeMode, setRouteMode] = useState(false);
+  const [selectedSource, setSelectedSource] = useState(null);
   const mapRef = useRef(null);
 
   useEffect(() => {
     const loadMapData = async () => {
       setIsLoading(true);
-      await fetchLiveUsers();
-      await fetchLivePaths();
-      const now = new Date();
-      setLastUpdated(now);
-      setCurrentTime(now.toLocaleString());
+      await Promise.all([fetchLiveUsers(), fetchLivePaths()]);
+      setLastUpdated(new Date());
       setIsLoading(false);
     };
 
     loadMapData();
-    const intervalId = setInterval(() => {
-      loadMapData();
-    }, 15000);
+    const intervalId = setInterval(loadMapData, 30000); // Refresh every 30 seconds
     
     return () => clearInterval(intervalId);
   }, [fetchLiveUsers, fetchLivePaths]);
@@ -98,41 +165,88 @@ const UserLocationMap = () => {
     }
   }, [liveUsers]);
 
-  const formatTime = (date) => date.toLocaleTimeString();
+  useEffect(() => {
+    if (livePaths) {
+      const parsed = livePaths.map(path => ({
+        ...path,
+        parsedRoute: parseRouteData(path.route)
+      })).filter(path => path.parsedRoute.length > 0);
+      
+      setPathsWithCoordinates(parsed);
+    }
+  }, [livePaths]);
 
-  if (isLoading && usersWithLocation.length === 0) {
+  const toggleRouteMode = () => {
+    setRouteMode(!routeMode);
+    if (routeMode) {
+      // If turning off, clear selected source
+      setSelectedSource(null);
+    }
+  };
+
+  const handleCreatePath = (source, destination) => {
+    createPath(source, destination);
+    setRouteMode(false);
+    setSelectedSource(null);
+  };
+
+  const formatTime = (date) => {
+    if (!(date instanceof Date)) {
+      try {
+        date = new Date(date);
+      } catch (e) {
+        return 'Unknown';
+      }
+    }
+    return date.toLocaleTimeString();
+  };
+
+  if (isLoading && usersWithLocation.length === 0 && pathsWithCoordinates.length === 0) {
     return <div className="map-loading">Loading map...</div>;
   }
 
-  if (usersWithLocation.length === 0) {
-    return (
-      <div className="no-location-data">
-        <h3>No Location Data Available</h3>
-        <p>None of the active users have selected a location yet.</p>
-      </div>
-    );
+  // Calculate center point for map display or use a default
+  let centerLat = 0, centerLng = 0;
+  
+  if (usersWithLocation.length > 0) {
+    centerLat = usersWithLocation.reduce((sum, u) => sum + u.latitude, 0) / usersWithLocation.length;
+    centerLng = usersWithLocation.reduce((sum, u) => sum + u.longitude, 0) / usersWithLocation.length;
+  } else {
+    // Default to a central location if no users
+    centerLat = 0;
+    centerLng = 0;
   }
-
-  // Calculate center point for map display
-  const centerLat = usersWithLocation.reduce((sum, u) => sum + u.latitude, 0) / usersWithLocation.length;
-  const centerLng = usersWithLocation.reduce((sum, u) => sum + u.longitude, 0) / usersWithLocation.length;
 
   return (
     <div className="map-container">
       <div className="map-header">
         <h3>Live User Map</h3>
-        <div className="map-stats">
-          <span>{usersWithLocation.length} users with location</span>
-          <span>Last updated: {formatTime(lastUpdated)}</span>
-          <span>Current user: {user?.username || 'Guest'}</span>
-          <span>Current time: {currentTime}</span>
+        <div className="map-controls">
+          <button 
+            className={`route-button ${routeMode ? 'active' : ''}`} 
+            onClick={toggleRouteMode}
+          >
+            {routeMode ? 'Cancel Route' : 'Create Route'}
+          </button>
+          
+          {routeMode && !selectedSource && (
+            <div className="route-instructions">Click on map to set starting point</div>
+          )}
+          
+          {routeMode && selectedSource && (
+            <div className="route-instructions">Click on map to set destination</div>
+          )}
+          
+          <span className="last-updated">
+            Last updated: {formatTime(lastUpdated)}
+          </span>
         </div>
       </div>
       
       <MapContainer 
         center={[centerLat, centerLng]} 
-        zoom={2} 
-        style={{ height: '500px', width: '100%' }}
+        zoom={3} 
+        style={{ height: '600px', width: '100%' }}
         ref={mapRef}
       >
         <TileLayer
@@ -140,24 +254,20 @@ const UserLocationMap = () => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
+        {/* Map click handler for route creation */}
+        <MapClickHandler 
+          routeMode={routeMode} 
+          selectedSource={selectedSource} 
+          setSelectedSource={setSelectedSource} 
+          createPath={handleCreatePath}
+        />
+        
+        {/* Display user markers */}
         {usersWithLocation.map(u => (
           <Marker 
-            key={u.id} 
+            key={`user-${u.id}`} 
             position={[u.latitude, u.longitude]}
-            icon={u.id === user?.id ? 
-              L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div class="marker-pin current-user"></div>`,
-                iconSize: [30, 42],
-                iconAnchor: [15, 42]
-              }) : 
-              L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div class="marker-pin other-user"></div>`,
-                iconSize: [30, 42],
-                iconAnchor: [15, 42]
-              })
-            }
+            icon={createCustomIcon(u.id === user?.id ? '#4285F4' : '#FF5722')}
           >
             <Popup>
               <div className="user-popup">
@@ -169,6 +279,9 @@ const UserLocationMap = () => {
                 <div className="user-location">
                   Coordinates: {u.latitude.toFixed(4)}, {u.longitude.toFixed(4)}
                 </div>
+                <div className="user-last-active">
+                  Last active: {formatTime(u.last_active)}
+                </div>
                 {u.id === user?.id && (
                   <div className="current-user-tag">This is you</div>
                 )}
@@ -177,133 +290,118 @@ const UserLocationMap = () => {
           </Marker>
         ))}
         
-        {/* Draw live user paths as polylines */}
-        {livePaths && livePaths.map((p, idx) => {
-          // Use the more robust parseRouteData function that can handle both formats
-          const positions = parseRouteData(p.route);
-          
-          // Only render if we have valid positions
-          if (positions && positions.length > 0) {
-            // Create markers for source and destination
-            const sourcePoint = positions[0];
-            const destPoint = positions[positions.length - 1];
-            
-            return (
-              <React.Fragment key={idx}>
-                <Polyline 
-                  positions={positions} 
-                  color={p.user_id === user?.id ? 'blue' : 'red'} 
-                  weight={4}
-                >
-                  <Popup>
-                    <div className="path-popup">
-                      <h4>Route Information</h4>
-                      <p><strong>User:</strong> {p.username || 'Unknown'}</p>
-                      <p><strong>Created:</strong> {p.timestamp || 'Unknown time'}</p>
-                      <p><strong>From:</strong> {sourcePoint[0].toFixed(4)}, {sourcePoint[1].toFixed(4)}</p>
-                      <p><strong>To:</strong> {destPoint[0].toFixed(4)}, {destPoint[1].toFixed(4)}</p>
-                    </div>
-                  </Popup>
-                </Polyline>
+        {/* Display route source marker if in route mode */}
+        {routeMode && selectedSource && (
+          <Marker 
+            position={[selectedSource.lat, selectedSource.lng]}
+            icon={createCustomIcon('#00C853')}
+          >
+            <Popup>Starting point</Popup>
+          </Marker>
+        )}
+        
+        {/* Display paths as polylines */}
+        {pathsWithCoordinates.map((path, idx) => (
+          <Polyline 
+            key={`path-${path.id || idx}`} 
+            positions={path.parsedRoute} 
+            color={path.user_id === user?.id ? '#2196F3' : '#FF5722'} 
+            weight={4}
+            opacity={0.7}
+          >
+            <Popup>
+              <div className="path-popup">
+                <h4>Route Information</h4>
+                <p><strong>User:</strong> {path.username || 'Unknown'}</p>
+                <p><strong>Created:</strong> {formatTime(path.created_at)}</p>
+                {path.parsedRoute.length > 0 && (
+                  <>
+                    <p><strong>From:</strong> {path.parsedRoute[0][0].toFixed(4)}, {path.parsedRoute[0][1].toFixed(4)}</p>
+                    <p><strong>To:</strong> {path.parsedRoute[path.parsedRoute.length-1][0].toFixed(4)}, {path.parsedRoute[path.parsedRoute.length-1][1].toFixed(4)}</p>
+                  </>
+                )}
+              </div>
+            </Popup>
+          </Polyline>
+        ))}
 
-                {/* Source marker with different icon */}
-                <Marker 
-                  position={sourcePoint}
-                  icon={L.divIcon({
-                    className: 'custom-div-icon',
-                    html: `<div class="marker-pin source-point"></div>`,
-                    iconSize: [20, 32],
-                    iconAnchor: [10, 32]
-                  })}
-                >
-                  <Popup>
-                    <div>
-                      <h4>Source Point</h4>
-                      <p>User: {p.username || 'Unknown'}</p>
-                      <p>Coordinates: {sourcePoint[0].toFixed(4)}, {sourcePoint[1].toFixed(4)}</p>
-                    </div>
-                  </Popup>
-                </Marker>
-
-                {/* Destination marker with different icon */}
-                <Marker 
-                  position={destPoint}
-                  icon={L.divIcon({
-                    className: 'custom-div-icon',
-                    html: `<div class="marker-pin destination-point"></div>`,
-                    iconSize: [20, 32],
-                    iconAnchor: [10, 32]
-                  })}
-                >
-                  <Popup>
-                    <div>
-                      <h4>Destination Point</h4>
-                      <p>User: {p.username || 'Unknown'}</p>
-                      <p>Coordinates: {destPoint[0].toFixed(4)}, {destPoint[1].toFixed(4)}</p>
-                    </div>
-                  </Popup>
-                </Marker>
-              </React.Fragment>
-            );
-          }
-          return null;
-        })}
-
-        <MapBoundsUpdater users={usersWithLocation} />
+        {/* Map bounds updater component */}
+        <MapBoundsUpdater 
+          users={usersWithLocation} 
+          paths={pathsWithCoordinates} 
+        />
       </MapContainer>
       
       <div className="map-legend">
-        <div className="legend-item">
-          <div className="legend-marker current-user"></div>
-          <span>Your location</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-marker other-user"></div>
-          <span>Other users</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-line" style={{ backgroundColor: 'blue' }}></div>
-          <span>Your path</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-line" style={{ backgroundColor: 'red' }}></div>
-          <span>Other users' paths</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-marker source-point"></div>
-          <span>Starting point</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-marker destination-point"></div>
-          <span>Destination</span>
+        <h4>Map Legend</h4>
+        <div className="legend-items">
+          <div className="legend-item">
+            <div className="legend-marker" style={{ backgroundColor: '#4285F4' }}></div>
+            <span>Your location</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-marker" style={{ backgroundColor: '#FF5722' }}></div>
+            <span>Other users</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-line" style={{ backgroundColor: '#2196F3' }}></div>
+            <span>Your paths</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-line" style={{ backgroundColor: '#FF5722' }}></div>
+            <span>Other users' paths</span>
+          </div>
+          {routeMode && (
+            <div className="legend-item">
+              <div className="legend-marker" style={{ backgroundColor: '#00C853' }}></div>
+              <span>Selected starting point</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Display route information box */}
-      <div className="route-info-panel">
-        <h4>Current Route Information</h4>
-        <p><strong>Date/Time:</strong> {currentTime}</p>
-        <p><strong>User:</strong> {user?.username || 'Guest'}</p>
-
-        <div className="route-list">
-          <h5>Active Routes</h5>
-          {livePaths && livePaths.length > 0 ? (
-            livePaths.map((path, idx) => (
-              <div key={idx} className="route-item">
-                <p><strong>User:</strong> {path.username || 'Unknown'}</p>
-                <p><strong>Created:</strong> {path.timestamp || 'Unknown'}</p>
-                <p><strong>Source:</strong> {path.source ? 
-                  `${path.source.lat.toFixed(4)}, ${path.source.lng.toFixed(4)}` : 
-                  'Unknown'}</p>
-                <p><strong>Destination:</strong> {path.destination ? 
-                  `${path.destination.lat.toFixed(4)}, ${path.destination.lng.toFixed(4)}` : 
-                  'Unknown'}</p>
-              </div>
-            ))
-          ) : (
-            <p>No active routes</p>
-          )}
+      {/* Display path information */}
+      <div className="map-info-panel">
+        <h4>Statistics</h4>
+        <div className="map-stats">
+          <div className="stat-item">
+            <strong>Active Users:</strong> {usersWithLocation.length}
+          </div>
+          <div className="stat-item">
+            <strong>Active Paths:</strong> {pathsWithCoordinates.length}
+          </div>
+          <div className="stat-item">
+            <strong>Last Updated:</strong> {formatTime(lastUpdated)}
+          </div>
         </div>
+        
+        {pathsWithCoordinates.length > 0 && (
+          <div className="recent-paths">
+            <h4>Recent Paths</h4>
+            <div className="paths-list">
+              {pathsWithCoordinates.slice(0, 5).map((path, idx) => (
+                <div key={idx} className="path-item">
+                  <div className="path-header">
+                    <strong>{path.username || 'Unknown user'}</strong>
+                    <span>{formatTime(path.created_at)}</span>
+                  </div>
+                  <div className="path-details">
+                    {path.parsedRoute.length > 0 && (
+                      <>
+                        <small>
+                          From: {path.parsedRoute[0][0].toFixed(4)}, {path.parsedRoute[0][1].toFixed(4)}
+                        </small>
+                        <small>
+                          To: {path.parsedRoute[path.parsedRoute.length-1][0].toFixed(4)}, {path.parsedRoute[path.parsedRoute.length-1][1].toFixed(4)}
+                        </small>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
