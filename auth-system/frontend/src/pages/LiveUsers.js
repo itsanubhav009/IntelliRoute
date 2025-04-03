@@ -13,7 +13,7 @@ const LiveUsers = () => {
     // Set up auto-refresh
     const intervalId = setInterval(() => {
       fetchLiveUsers();
-    }, 10000); // Refresh every 10 seconds
+    }, 1000000); // Refresh every 10 seconds
     
     setRefreshInterval(intervalId);
     
