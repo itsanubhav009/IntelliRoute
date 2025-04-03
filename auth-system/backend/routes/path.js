@@ -20,26 +20,50 @@ router.use(protect);
 
 // POST /api/path/set - Calculates a path and stores it in memory
 router.post('/set', async (req, res) => {
-    try {
-      const userId = req.user.id;
-      const { source, destination, routeWKT } = req.body;
-      
-      if (!source || !destination || !routeWKT) {
-        return res.status(400).json({ message: 'Source, Destination and routeWKT are required' });
-      }
-  
-      // Example: routeWKT = "LINESTRING(77.209 28.6139, 75.04335 23.84495, 72.8777 19.076)"
-      // Insert the route. The geometry column is updated using PostGIS' ST_GeomFromText function.
-      const { data, error } = await supabase
-        .from('user_paths')
-        .insert([
-          {
-            user_id: userId,
-            route_geometry: routeWKT ? supabase.raw(`ST_SetSRID(ST_GeomFromText(?), 4326)`, [routeWKT]) : null
-          }
-        ])
-        .select('id, route_geometry');
-      
+  try {
+    console.log('Request body received:', JSON.stringify(req.body));
+    const userId = req.user.id;
+    const { source, destination, routeWKT: providedRouteWKT } = req.body;
+    
+    // Debug extracted values
+    console.log('Extracted values:', { 
+      userIdExists: !!userId,
+      sourceExists: !!source, 
+      destinationExists: !!destination, 
+      routeWKTExists: !!providedRouteWKT 
+    });
+    
+    // More detailed validation
+    const missingFields = [];
+    if (!source) missingFields.push('source');
+    if (!destination) missingFields.push('destination');
+    
+    if (missingFields.length > 0) {
+      console.log('Missing fields:', missingFields);
+      return res.status(400).json({ 
+        message: `Missing required fields: ${missingFields.join(', ')}` 
+      });
+    }
+    
+    // Generate WKT if not provided
+    let routeWKT = providedRouteWKT;
+    if (!routeWKT && source && destination) {
+      // Create a direct line from source to destination
+      routeWKT = `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
+      console.log('Generated routeWKT:', routeWKT);
+    }
+    
+   // Now proceed with the database insert
+   const { data, error } = await supabase
+   .from('user_paths')
+   .insert([
+     {
+       user_id: userId,
+       route_geometry: routeWKT
+     }
+   ])
+   .select('id, route_geometry');
+     
       if (error) {
         console.error('Error inserting path:', error);
         return res.status(500).json({ message: 'Error inserting path', error });
@@ -59,16 +83,19 @@ router.post('/set', async (req, res) => {
 // GET /api/path/live - Returns live user paths from memory
 router.get('/live', protect, async (req, res) => {
   try {
-    // Get paths from memory
-    const livePaths = Array.from(inMemoryPaths.values()).map(item => ({
-      user_id: item.user_id,
-      route: JSON.stringify(item.path_points)
-    }));
-    
+    const { data: livePaths, error } = await supabase
+      .from('user_paths')
+      .select('id, user_id, ST_AsText(route_geometry) as route, created_at');
+
+    if (error) {
+      console.error('Error fetching live paths:', error);
+      return res.status(500).json({ message: 'Error fetching live paths', error });
+    }
+
     res.json({ data: livePaths });
   } catch (error) {
     console.error('Error in /path/live:', error);
-    res.json({ data: [] });
+    res.status(500).json({ data: [] });
   }
 });
 
