@@ -15,7 +15,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
-
+// Add this before your routes
+app.use((req, res, next) => {
+  // Extract token from header
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+  
+  console.log(`[DEBUG] Request: ${req.method} ${req.path}`);
+  console.log(`[DEBUG] Auth Header: ${token ? 'Present' : 'Missing'}`);
+  
+  next();
+});
 // THEN add routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/path', pathRoutes);

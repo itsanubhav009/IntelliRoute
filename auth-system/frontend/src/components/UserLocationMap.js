@@ -29,7 +29,35 @@ const createCustomIcon = (color) => {
   });
 };
 
-// Component to update map bounds based on users' positions
+// Helper to parse route data from PostGIS or OSRM
+const parseRouteData = (routeData) => {
+  if (!routeData) return [];
+  
+  // LINESTRING parsing
+  if (typeof routeData === 'string' && routeData.startsWith('LINESTRING')) {
+    try {
+      // Extract coordinates from LINESTRING(lng lat, lng lat, ...)
+      const coordsStr = routeData.substring(routeData.indexOf('(') + 1, routeData.lastIndexOf(')'));
+      return coordsStr.split(',').map(pair => {
+        const [lng, lat] = pair.trim().split(' ').map(parseFloat);
+        // Return [lat, lng] for Leaflet
+        return [lat, lng]; 
+      });
+    } catch (e) {
+      console.error('Error parsing LINESTRING:', e, routeData);
+      return [];
+    }
+  }
+  
+  // If it's already an array, return it (assuming it's in Leaflet's [lat, lng] format)
+  if (Array.isArray(routeData)) {
+    return routeData;
+  }
+  
+  return [];
+};
+
+// Component to update map bounds based on users' positions and routes
 function MapBoundsUpdater({ users, paths }) {
   const map = useMap();
   
@@ -37,7 +65,6 @@ function MapBoundsUpdater({ users, paths }) {
     if (!users.length && !paths.length) return;
     
     try {
-      // Collect all points from users and paths
       const points = [];
       
       // Add user points
@@ -47,14 +74,25 @@ function MapBoundsUpdater({ users, paths }) {
         }
       });
       
-      // Add path points
+      // Add path points (with better handling for complex routes)
       paths.forEach(path => {
         if (path.parsedRoute && Array.isArray(path.parsedRoute)) {
-          path.parsedRoute.forEach(point => {
-            if (Array.isArray(point) && point.length >= 2) {
-              points.push([point[0], point[1]]);
+          // Don't add every point - just add first, last, and some in between
+          // to avoid overloading the bounds calculation with too many points
+          const routePoints = path.parsedRoute;
+          if (routePoints.length > 0) {
+            points.push(routePoints[0]); // Add first point
+            
+            if (routePoints.length > 10) {
+              // Add a few points in the middle for long routes
+              points.push(routePoints[Math.floor(routePoints.length / 3)]);
+              points.push(routePoints[Math.floor(routePoints.length * 2 / 3)]);
             }
-          });
+            
+            if (routePoints.length > 1) {
+              points.push(routePoints[routePoints.length - 1]); // Add last point
+            }
+          }
         }
       });
       
@@ -93,45 +131,6 @@ function MapClickHandler({ routeMode, selectedSource, setSelectedSource, createP
   
   return null;
 }
-
-// Helper to parse route data from PostGIS
-const parseRouteData = (routeData) => {
-  if (!routeData) return [];
-  
-  // Check if it's a WKT LINESTRING
-  if (typeof routeData === 'string' && routeData.startsWith('LINESTRING')) {
-    try {
-      // Parse the LINESTRING(lng lat, lng lat, ...) format
-      const coordsStr = routeData.substring(11, routeData.length - 1);
-      return coordsStr.split(',').map(pair => {
-        const [lng, lat] = pair.trim().split(' ');
-        return [parseFloat(lat), parseFloat(lng)]; // Leaflet uses [lat, lng]
-      });
-    } catch (e) {
-      console.error('Error parsing LINESTRING:', e);
-      return [];
-    }
-  }
-  
-  // If it's already an array, return it directly (assumed to be in [lat, lng] format)
-  if (Array.isArray(routeData)) {
-    return routeData;
-  }
-  
-  // Try to parse as JSON
-  if (typeof routeData === 'string') {
-    try {
-      const parsed = JSON.parse(routeData);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch (e) {
-      // Not valid JSON, ignore
-    }
-  }
-  
-  return [];
-};
 
 const UserLocationMap = () => {
   const { liveUsers, fetchLiveUsers, livePaths, fetchLivePaths, createPath } = useContext(LocationContext);
@@ -318,6 +317,7 @@ const UserLocationMap = () => {
                   <>
                     <p><strong>From:</strong> {path.parsedRoute[0][0].toFixed(4)}, {path.parsedRoute[0][1].toFixed(4)}</p>
                     <p><strong>To:</strong> {path.parsedRoute[path.parsedRoute.length-1][0].toFixed(4)}, {path.parsedRoute[path.parsedRoute.length-1][1].toFixed(4)}</p>
+                    <p><strong>Points:</strong> {path.parsedRoute.length}</p>
                   </>
                 )}
               </div>
@@ -393,6 +393,9 @@ const UserLocationMap = () => {
                         </small>
                         <small>
                           To: {path.parsedRoute[path.parsedRoute.length-1][0].toFixed(4)}, {path.parsedRoute[path.parsedRoute.length-1][1].toFixed(4)}
+                        </small>
+                        <small>
+                          Route Points: {path.parsedRoute.length}
                         </small>
                       </>
                     )}

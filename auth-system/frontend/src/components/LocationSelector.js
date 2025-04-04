@@ -59,17 +59,15 @@ const LocationSelector = () => {
   };
 
   // Direct API call to create a path
-  const sendPathToServer = async (source, destination, routeWKT) => {
+  const sendPathToServer = async (source, destination) => {
     setDebugInfo('Preparing to send path data to server...');
     
     try {
-      // Log the request details
       console.log('Sending path data:', {
         endpoint: '/path/set',
-        payload: { source, destination, routeWKT }
+        payload: { source, destination }
       });
       
-      // Direct fetch API call for maximum control
       const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:5000/api/path/set', {
         method: 'POST',
@@ -79,8 +77,7 @@ const LocationSelector = () => {
         },
         body: JSON.stringify({
           source,
-          destination,
-          routeWKT
+          destination
         })
       });
       
@@ -88,63 +85,85 @@ const LocationSelector = () => {
       
       console.log('Path API response:', data);
       setDebugInfo(`API response received: ${response.status} - ${JSON.stringify(data)}`);
+      
+      if (!response.ok) {
+        throw { response: { data } };
+      }
+      
       return data;
     } catch (error) {
       console.error('Path API error details:', error);
-      setDebugInfo(`Error: ${error.message}`);
+      setDebugInfo(`Error: ${error.message || 'Unknown error'}`);
       throw error;
     }
   };
-
   // Submit function to update both current location and destination path.
-  const handleSubmit = async () => {
-    if (!selectedSource || !selectedDestination) {
-      setMessage({ type: 'error', text: 'Please select both your current location and destination.' });
-      return;
+  // This adds to your existing component
+// Inside the handleSubmit function:
+
+const handleSubmit = async () => {
+  if (!selectedSource || !selectedDestination) {
+    setMessage({ type: 'error', text: 'Please select both your current location and destination.' });
+    return;
+  }
+  
+  setIsUpdating(true);
+  setDebugInfo('Starting update process...');
+  
+  try {
+    // Update current location on server
+    setDebugInfo('Updating location...');
+    await updateLocation(selectedSource.latitude, selectedSource.longitude);
+    
+    // Prepare the path data
+    const sourcePoint = {
+      lat: selectedSource.latitude,
+      lng: selectedSource.longitude
+    };
+    
+    const destPoint = {
+      lat: selectedDestination.latitude,
+      lng: selectedDestination.longitude
+    };
+    
+    setDebugInfo('Sending path data to server for route calculation...');
+    
+    // We no longer create the routeWKT here - the server will handle it
+    // Just send source and destination points
+    const response = await sendPathToServer(sourcePoint, destPoint);
+    
+    if (response.routeWKT) {
+      setDebugInfo(`Server calculated route with ${response.routeWKT.split(',').length} points`);
     }
     
-    setIsUpdating(true);
-    setDebugInfo('Starting update process...');
+    setDebugInfo('Update completed successfully');
+    setMessage({ 
+      type: 'success', 
+      text: `Location updated to ${selectedSource.name} and route to ${selectedDestination.name} created.`
+    });
+  } catch (error) {
+    console.error('Failed to update location/path:', error);
     
-    try {
-      // Update current location on server
-      setDebugInfo('Updating location...');
-      await updateLocation(selectedSource.latitude, selectedSource.longitude);
+    // Better error handling
+    let errorMessage = 'Failed to update. Please try again.';
+    
+    if (error.response && error.response.data && error.response.data.message) {
+      errorMessage = error.response.data.message;
       
-      // Prepare the path data
-      const sourcePoint = {
-        lat: selectedSource.latitude,
-        lng: selectedSource.longitude
-      };
-      
-      const destPoint = {
-        lat: selectedDestination.latitude,
-        lng: selectedDestination.longitude
-      };
-      
-      // Generate a WKT LINESTRING format for the route
-      const routeWKT = `LINESTRING(${sourcePoint.lng} ${sourcePoint.lat}, ${destPoint.lng} ${destPoint.lat})`;
-      
-      setDebugInfo('Sending path data...');
-      
-      // Send the path data to the server
-      await sendPathToServer(sourcePoint, destPoint, routeWKT);
-      
-      setDebugInfo('Update completed successfully');
-      setMessage({ 
-        type: 'success', 
-        text: `Location updated to ${selectedSource.name} and destination set to ${selectedDestination.name}.`
-      });
-    } catch (error) {
-      console.error('Failed to update location/path:', error);
-      setMessage({ 
-        type: 'error', 
-        text: 'Failed to update. Please check debug info and console for details.'
-      });
-    } finally {
-      setIsUpdating(false);
+      // Special handling for inactive user error
+      if (errorMessage.includes('Only active users')) {
+        errorMessage = 'Your location needs to be updated first. Please try again in a moment.';
+      }
     }
-  };
+    
+    setMessage({ type: 'error', text: errorMessage });
+  } finally {
+    setIsUpdating(false);
+  }
+};
+
+// Update sendPathToServer function
+
 
   // For debugging - directly test API call
   const testApiCall = async () => {

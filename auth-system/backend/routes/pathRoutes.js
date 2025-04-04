@@ -1,8 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
-
-// Try to load Supabase, fallback to memory DB if issues
+const https = require('https');
+// At the beginning of your pathRoutes.js file
+// This should come BEFORE any route definitions
+router.use(protect);
+// Try to load Supabase
 let databaseClient;
 try {
   databaseClient = require('../config/supabase');
@@ -18,17 +21,116 @@ try {
 // All routes below require authentication
 router.use(protect);
 
-// POST /api/path/set - Stores a path in database
+// Helper function: Artificial delay to slow down requests as requested
+const addDelay = (ms = 2000) => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+// Helper function: Make HTTPS request without external dependencies
+const makeHttpRequest = (url) => {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(new Error('Failed to parse response: ' + e.message));
+        }
+      });
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+};
+
+// Helper to get route from OpenStreetMap (OSRM)
+const getOSRMRoute = async (source, destination) => {
+  try {
+    // Call the OSRM API
+    const osrmURL = `https://router.project-osrm.org/route/v1/driving/${source.lng},${source.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+    
+    console.log(`Fetching route from OSRM: ${osrmURL}`);
+    const data = await makeHttpRequest(osrmURL);
+    
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
+      console.error('OSRM API error or no routes returned:', data);
+      // Fallback to direct line if routing fails
+      return `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
+    }
+    
+    // Extract the coordinates from the route
+    const coordinates = data.routes[0].geometry.coordinates;
+    
+    // Convert to WKT LINESTRING format
+    const points = coordinates.map(point => `${point[0]} ${point[1]}`).join(', ');
+    const wkt = `LINESTRING(${points})`;
+    
+    console.log(`Generated WKT route with ${coordinates.length} points`);
+    return wkt;
+  } catch (error) {
+    console.error('Error fetching OSRM route:', error);
+    // Fallback to direct line if routing fails
+    return `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
+  }
+};
+
+// Update user's location and set them as ONLINE
+const updateUserLocationAndStatus = async (userId, source) => {
+  if (typeof databaseClient.from !== 'function') {
+    return;
+  }
+  
+  try {
+    const now = new Date().toISOString();
+    console.log(`Updating location for user ${userId} to ${source.lat}, ${source.lng} at ${now}`);
+    
+    const { data, error } = await databaseClient
+      .from('profiles')
+      .update({
+        latitude: source.lat,
+        longitude: source.lng,
+        last_active: now,
+        status: 'online' // Set user as online
+      })
+      .eq('id', userId);
+      
+    if (error) {
+      console.error('Error updating user location and status:', error);
+    } else {
+      console.log('User location and online status updated successfully');
+    }
+  } catch (error) {
+    console.error('Exception updating user location and status:', error);
+  }
+};
+
+// POST /api/path/set - Stores a path in database for the current user
 router.post('/set', async (req, res) => {
   try {
+    // Add artificial delay as requested
+    await addDelay(2000);
+    
     const userId = req.user.id;
-    const { source, destination, routeWKT } = req.body;
+    const { source, destination } = req.body;
     
-    console.log('Received path data:', { source, destination, routeWKT });
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] User ${userId} requested to create a path:`, { source, destination });
     
-    if (!source || !destination || !routeWKT) {
-      return res.status(400).json({ message: 'Source, Destination and routeWKT are required' });
+    if (!source || !destination) {
+      return res.status(400).json({ message: 'Source and Destination are required' });
     }
+
+    // Update user's location and set them ONLINE
+    await updateUserLocationAndStatus(userId, source);
+    
+    // Get the route from OpenStreetMap
+    const routeWKT = await getOSRMRoute(source, destination);
 
     let pathData;
     
@@ -36,7 +138,7 @@ router.post('/set', async (req, res) => {
     if (typeof databaseClient.from === 'function') {
       // Using Supabase
       const { data, error } = await databaseClient
-        .from('user_routes')
+        .from('commute_routes')
         .insert([
           {
             user_id: userId,
@@ -55,14 +157,17 @@ router.post('/set', async (req, res) => {
       }
       
       pathData = data[0];
+      console.log(`Created path with ID: ${pathData.id}`);
     } else {
       // Using fallback
       pathData = databaseClient.addRoute(userId, source, destination, routeWKT);
+      console.log(`Created path with ID: ${pathData.id} in fallback DB`);
     }
     
     res.json({
       message: 'Path stored successfully',
-      pathId: pathData?.id
+      pathId: pathData?.id,
+      routeWKT
     });
   } catch (error) {
     console.error('Exception in path creation:', error);
@@ -73,16 +178,28 @@ router.post('/set', async (req, res) => {
   }
 });
 
-// GET /api/path/live - Returns all paths
+// GET /api/path/live - Returns paths ONLY for ONLINE users
+// GET /api/path/live - Returns paths for active users
 router.get('/live', async (req, res) => {
   try {
-    let pathsData;
+    // Add artificial delay as requested
+    await addDelay(2000);
+    
+    const currentUserId = req.user?.id;
+    console.log(`Fetching paths for current user: ${currentUserId}`);
+    
+    let pathsData = [];
     
     // Use the appropriate client
     if (typeof databaseClient.from === 'function') {
-      // Using Supabase
-      const { data, error } = await databaseClient
-        .from('user_routes')
+      // UPDATED QUERY: Use a wider time window (30 minutes)
+      // or include current user's ID directly
+      const thirtyMinutesAgo = new Date();
+      thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+      
+      // First try to get all paths for the current user
+      const { data: userPaths, error: userPathsError } = await databaseClient
+        .from('commute_routes')
         .select(`
           id,
           user_id,
@@ -93,22 +210,84 @@ router.get('/live', async (req, res) => {
           dest_lng,
           route_wkt
         `)
+        .eq('user_id', currentUserId)
         .order('created_at', { ascending: false });
       
-      if (error) {
-        console.error('Database error fetching paths:', error);
-        return res.status(500).json({ message: 'Error fetching paths', error });
+      if (userPathsError) {
+        console.error('Error fetching user paths:', userPathsError);
+      } else if (userPaths && userPaths.length > 0) {
+        // We found paths for the current user
+        pathsData = userPaths.map(path => ({
+          id: path.id,
+          user_id: path.user_id,
+          created_at: path.created_at,
+          route: path.route_wkt,
+          source: {
+            lat: path.source_lat,
+            lng: path.source_lng
+          },
+          destination: {
+            lat: path.dest_lat,
+            lng: path.dest_lng
+          }
+        }));
+        
+        console.log(`Found ${pathsData.length} paths for current user`);
+      } else {
+        console.log('No paths found for current user, getting recent paths');
+        
+        // Get active user profiles
+        const { data: activeUsers, error: userError } = await databaseClient
+          .from('profiles')
+          .select('id')
+          .gt('last_active', thirtyMinutesAgo.toISOString());
+          
+        if (userError) {
+          console.error('Error fetching active users:', userError);
+        } else if (activeUsers && activeUsers.length > 0) {
+          const activeUserIds = activeUsers.map(user => user.id);
+          console.log(`Found ${activeUserIds.length} active users`);
+          
+          // Get paths for active users
+          const { data: paths, error: pathsError } = await databaseClient
+            .from('commute_routes')
+            .select(`
+              id,
+              user_id,
+              created_at,
+              source_lat,
+              source_lng,
+              dest_lat,
+              dest_lng,
+              route_wkt
+            `)
+            .in('user_id', activeUserIds)
+            .order('created_at', { ascending: false });
+          
+          if (pathsError) {
+            console.error('Error fetching paths:', pathsError);
+          } else if (paths && paths.length > 0) {
+            pathsData = paths.map(path => ({
+              id: path.id,
+              user_id: path.user_id,
+              created_at: path.created_at,
+              route: path.route_wkt,
+              source: {
+                lat: path.source_lat,
+                lng: path.source_lng
+              },
+              destination: {
+                lat: path.dest_lat,
+                lng: path.dest_lng
+              }
+            }));
+            
+            console.log(`Found ${pathsData.length} paths for active users`);
+          }
+        }
       }
-      
-      // Transform the data
-      pathsData = data.map(path => ({
-        id: path.id,
-        user_id: path.user_id,
-        created_at: path.created_at,
-        route: path.route_wkt
-      }));
     } else {
-      // Using fallback
+      // Using fallback - in fallback mode, just get all paths
       pathsData = databaseClient.getLivePaths();
     }
     
