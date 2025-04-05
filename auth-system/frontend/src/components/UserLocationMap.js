@@ -13,7 +13,7 @@ import NotificationButton from './NotificationButton';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faComments } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faSync } from '@fortawesome/free-solid-svg-icons';
 
 
 let DefaultIcon = L.icon({
@@ -146,8 +146,11 @@ const UserLocationMap = () => {
     fetchLivePaths, 
     createPath, 
     showIntersectingOnly, 
-    toggleIntersectionFilter 
+    toggleIntersectionFilter,
+    // Add this to properly get the forceRefreshData function
+    forceRefreshData
   } = useContext(LocationContext);
+  
   const { user } = useContext(AuthContext);
   // Get all the chat context values we need including activeChats
   const { 
@@ -184,6 +187,34 @@ const UserLocationMap = () => {
       });
   };
 
+  // Handle refresh button click
+  const handleRefresh = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Manually refreshing map data...');
+      
+      // Only use forceRefreshData if it exists, otherwise fall back to the individual fetch functions
+      if (forceRefreshData) {
+        await forceRefreshData();
+      } else {
+        await Promise.all([fetchLiveUsers(), fetchLivePaths()]);
+      }
+      
+      setLastUpdated(new Date());
+      console.log('Map data refreshed manually');
+    } catch (error) {
+      console.error('Manual refresh failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Enhanced notification toggle with debugging
+  const toggleNotifications = () => {
+    console.log('Toggling notifications panel. Current state:', showNotifications);
+    setShowNotifications(!showNotifications);
+  };
+
   // Fetch active chats on component mount
   useEffect(() => {
     if (user && fetchActiveChats) {
@@ -191,7 +222,28 @@ const UserLocationMap = () => {
     }
   }, [user, fetchActiveChats]);
 
+  // Effect for initial data load and periodic updates
   useEffect(() => {
+    if (!user) return;
+    
+    // Initial load - force immediate fetch
+    setIsLoading(true);
+    console.log('Initial data load...');
+    
+    // Use Promise.all to load both data types in parallel
+    Promise.all([fetchLiveUsers(), fetchLivePaths()])
+      .then(([users, paths]) => {
+        console.log(`Initial load complete: ${users?.length || 0} users, ${paths?.length || 0} paths`);
+        setLastUpdated(new Date());
+      })
+      .catch(error => {
+        console.error('Error in initial data load:', error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+    
+    // Then set up regular polling
     let isMounted = true;
     
     const loadMapData = async () => {
@@ -219,35 +271,59 @@ const UserLocationMap = () => {
       }
     };
 
-    // Initial load
-    loadMapData();
     const intervalId = setInterval(loadMapData, 30000); // Reduced to 30 seconds
-    
-    // Set up a controlled interval with a single timer
-    // Use 30 seconds to reduce server load
-   // const intervalId = setInterval(loadMapData, 30000);
     
     return () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [fetchLiveUsers, fetchLivePaths, lastUpdated, isLoading]);
+  }, [user, fetchLiveUsers, fetchLivePaths]);
 
+  // Effect to process user data
   useEffect(() => {
     if (liveUsers) {
-      const filtered = liveUsers.filter(u => u.latitude && u.longitude);
+      console.log(`Processing ${liveUsers.length} users with location data`);
+      const filtered = liveUsers.filter(u => {
+        // Add more detailed validation
+        const hasValidLocation = u && 
+                               u.latitude && !isNaN(parseFloat(u.latitude)) && 
+                               u.longitude && !isNaN(parseFloat(u.longitude));
+        
+        if (!hasValidLocation && u) {
+          console.log(`User ${u.username || 'unknown'} has invalid location data:`, u.latitude, u.longitude);
+        }
+        
+        return hasValidLocation;
+      });
+      
+      console.log(`Found ${filtered.length} users with valid location data`);
       setUsersWithLocation(filtered);
+    } else {
+      console.log('No live users data available');
+      setUsersWithLocation([]);
     }
   }, [liveUsers]);
 
+  // Effect to process path data
   useEffect(() => {
     if (livePaths) {
+      console.log(`Processing ${livePaths.length} paths`);
       const parsed = livePaths.map(path => ({
         ...path,
         parsedRoute: parseRouteData(path.route)
-      })).filter(path => path.parsedRoute.length > 0);
+      })).filter(path => {
+        const isValid = path.parsedRoute && path.parsedRoute.length > 0;
+        if (!isValid) {
+          console.log(`Path ${path.id} has invalid route data`);
+        }
+        return isValid;
+      });
       
+      console.log(`Found ${parsed.length} paths with valid route data`);
       setPathsWithCoordinates(parsed);
+    } else {
+      console.log('No live paths data available');
+      setPathsWithCoordinates([]);
     }
   }, [livePaths]);
 
@@ -281,7 +357,7 @@ const UserLocationMap = () => {
   };
 
   if (isLoading && usersWithLocation.length === 0 && pathsWithCoordinates.length === 0) {
-    return <div className="map-loading">Loading map...</div>;
+    return <div className="map-loading">Loading map data...</div>;
   }
 
   // Calculate center point for map display or use a default
@@ -292,8 +368,8 @@ const UserLocationMap = () => {
     centerLng = usersWithLocation.reduce((sum, u) => sum + parseFloat(u.longitude || 0), 0) / usersWithLocation.length;
   } else {
     // Default to a central location if no users
-    centerLat = 0;
-    centerLng = 0;
+    centerLat = 37.7749; // San Francisco as a default
+    centerLng = -122.4194;
   }
 
   return (
@@ -304,10 +380,19 @@ const UserLocationMap = () => {
         <div className="notification-controls">
           <NotificationButton 
             notificationCount={notifications ? notifications.length : 0}
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={toggleNotifications}
           />
           
-          {/* New intersection filter toggle button */}
+          {/* Manual refresh button */}
+          <button 
+            className="refresh-button"
+            onClick={handleRefresh}
+            title="Refresh map data"
+          >
+            <FontAwesomeIcon icon={faSync} />
+          </button>
+          
+          {/* Filter button */}
           <button
             className={`filter-button ${showIntersectingOnly ? 'active' : ''}`}
             onClick={handleToggleIntersectionFilter}
@@ -315,10 +400,6 @@ const UserLocationMap = () => {
           >
             {showIntersectingOnly ? 'Show All Paths' : 'Show Intersecting Only'}
           </button>
-          
-          {routeMode && !selectedSource && (
-            <div className="route-instructions">Click on map to set starting point</div>
-          )}
         </div>
         
         <button 
@@ -341,6 +422,11 @@ const UserLocationMap = () => {
         </span>
       </div>
     </div>
+      
+      {/* Show notifications panel when toggled */}
+      {showNotifications && (
+        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+      )}
       
       {/* Intersection filter info message */}
       {showIntersectingOnly && (
@@ -372,42 +458,73 @@ const UserLocationMap = () => {
           createPath={handleCreatePath}
         />
         
-        {/* Display user markers */}
-        {usersWithLocation.map(u => (
-          <Marker 
-            key={`user-${u.id}`} 
-            position={[parseFloat(u.latitude), parseFloat(u.longitude)]}
-            icon={createCustomIcon(u.id === user?.id ? '#4285F4' : '#FF5722')}
-          >
-            <Popup>
-              <div className="user-popup">
-                <h3>{u.username}</h3>
-                <div className="user-status">
-                  <span className="status-dot"></span>
-                  Online
-                </div>
-                <div className="user-location">
-                  Coordinates: {parseFloat(u.latitude).toFixed(4)}, {parseFloat(u.longitude).toFixed(4)}
-                </div>
-                <div className="user-last-active">
-                  Last active: {formatTime(u.last_active)}
-                </div>
-                {u.id === user?.id ? (
-                  <div className="current-user-tag">This is you</div>
-                ) : (
-                  <div className="chat-button-container">
-                    <button 
-                      className="chat-request-button"
-                      onClick={() => handleChatRequest(u.id)}
-                    >
-                      Chat with {u.username}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {/* Display user markers with better error handling */}
+        {usersWithLocation && usersWithLocation.length > 0 ? (
+          usersWithLocation.map(u => {
+            try {
+              const lat = parseFloat(u.latitude);
+              const lng = parseFloat(u.longitude);
+              
+              if (isNaN(lat) || isNaN(lng)) {
+                console.warn(`Invalid coordinates for user ${u.username}: [${u.latitude}, ${u.longitude}]`);
+                return null;
+              }
+              
+              return (
+                <Marker 
+                  key={`user-${u.id}`} 
+                  position={[lat, lng]}
+                  icon={createCustomIcon(u.id === user?.id ? '#4285F4' : '#FF5722')}
+                >
+                  <Popup>
+                    <div className="user-popup">
+                      <h3>{u.username}</h3>
+                      <div className="user-status">
+                        <span className="status-dot"></span>
+                        Online
+                      </div>
+                      <div className="user-location">
+                        Coordinates: {lat.toFixed(4)}, {lng.toFixed(4)}
+                      </div>
+                      <div className="user-last-active">
+                        Last active: {formatTime(u.last_active)}
+                      </div>
+                      {u.id === user?.id ? (
+                        <div className="current-user-tag">This is you</div>
+                      ) : (
+                        <div className="chat-button-container">
+                          <button 
+                            className="chat-request-button"
+                            onClick={() => handleChatRequest(u.id)}
+                          >
+                            Chat with {u.username}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            } catch (error) {
+              console.error(`Error rendering marker for user ${u.username}:`, error);
+              return null;
+            }
+          })
+        ) : (
+          <div className="no-users-message" style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000,
+            backgroundColor: 'white',
+            padding: '10px 15px',
+            borderRadius: '4px',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+          }}>
+            No active users found on the map
+          </div>
+        )}
 
         {/* Display route source marker if in route mode */}
         {routeMode && selectedSource && (
@@ -509,7 +626,7 @@ const UserLocationMap = () => {
           )}
         </div>
         
-        {/* New Active Chats Panel */}
+        {/* Active Chats Panel */}
         <div className="active-chats">
           <h4>
             <FontAwesomeIcon icon={faComments} /> Active Chats

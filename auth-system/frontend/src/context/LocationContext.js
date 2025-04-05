@@ -13,6 +13,12 @@ export const LocationProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [showIntersectingOnly, setShowIntersectingOnly] = useState(false);
+  
+  // Add this fetchTimers ref to solve the undefined error
+  const fetchTimers = useRef({
+    users: 0,
+    paths: 0
+  });
 
   // Update the user's location
   const updateLocation = async (latitude, longitude) => {
@@ -83,6 +89,7 @@ export const LocationProvider = ({ children }) => {
         console.log('Intersection filter active, showing only paths that cross your route');
       }
       
+      const now = Date.now();
       fetchTimers.current.paths = now;
       setLivePaths(response.data.data || []);
       setLastUpdated(new Date());
@@ -107,6 +114,7 @@ export const LocationProvider = ({ children }) => {
     setIsLoading(true);
     try {
       const response = await api.get('/location/live');
+      fetchTimers.current.users = now;
       setLiveUsers(response.data.data || []);
       setLastUpdated(new Date());
       console.log(`Fetched ${response.data.data?.length || 0} online users`);
@@ -158,6 +166,43 @@ export const LocationProvider = ({ children }) => {
     }
   }, [user]);
 
+
+  const forceRefreshData = async () => {
+    console.log("Force refreshing location data...");
+    setIsLoading(true);
+    try {
+      // Clear the timers to bypass throttling
+      fetchTimers.current = {
+        users: 0,
+        paths: 0
+      };
+      
+      // First get users
+      const usersResponse = await api.get('/location/live');
+      const userData = usersResponse.data.data || [];
+      console.log("Users data:", userData);
+      
+      // Then get paths
+      const pathsResponse = await api.get(`/path/live?intersectOnly=${showIntersectingOnly}`);
+      const pathsData = pathsResponse.data.data || [];
+      console.log("Paths data:", pathsData);
+      
+      // Update states
+      setLiveUsers(userData);
+      setLivePaths(pathsData);
+      setLastUpdated(new Date());
+      
+      // Return data for any additional processing
+      return { users: userData, paths: pathsData };
+    } catch (error) {
+      console.error("Error in force refresh:", error);
+      setError("Failed to refresh location data: " + error.message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <LocationContext.Provider
       value={{
@@ -173,7 +218,8 @@ export const LocationProvider = ({ children }) => {
         fetchLiveUsers,
         fetchLivePaths,
         toggleIntersectionFilter,
-        getCurrentPosition
+        getCurrentPosition,
+        forceRefreshData  // Add this new function
       }}
     >
       {children}

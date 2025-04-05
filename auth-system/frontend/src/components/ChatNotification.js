@@ -1,29 +1,45 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { ChatContext } from '../context/ChatContext';
 import './ChatNotification.css';
 
 const ChatNotification = ({ notification }) => {
   const { acceptChatRequest, declineChatRequest, openChat } = useContext(ChatContext);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isDeclining, setIsDeclining] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleAccept = async () => {
     try {
-      console.log('Accepting chat request for room:', notification.chat_room_id);
-      const result = await acceptChatRequest(notification.chat_room_id);
-      console.log('Chat request accepted, result:', result);
+      setIsAccepting(true);
+      setError(null);
       
-      // Important: Open the chat after accepting
-      openChat(notification.chat_room_id);
+      console.log('Accepting chat request for room:', notification.chat_room_id);
+      await acceptChatRequest(notification.chat_room_id);
+      
+      // Explicitly open the chat after accepting
+      setTimeout(() => {
+        openChat(notification.chat_room_id);
+      }, 1000);
     } catch (error) {
       console.error('Failed to accept chat request', error);
+      setError('Could not accept chat request. Please try again.');
+    } finally {
+      setIsAccepting(false);
     }
   };
 
   const handleDecline = async () => {
     try {
+      setIsDeclining(true);
+      setError(null);
+      
       console.log('Declining chat request');
       await declineChatRequest(notification.chat_room_id);
     } catch (error) {
       console.error('Failed to decline chat request', error);
+      setError('Could not decline chat request. Please try again.');
+    } finally {
+      setIsDeclining(false);
     }
   };
 
@@ -40,20 +56,36 @@ const ChatNotification = ({ notification }) => {
         <div className="notification-time">{formatTime(notification.created_at)}</div>
       </div>
       
+      {error && <div className="notification-error">{error}</div>}
+      
       {/* For chat requests, show accept/decline buttons */}
       {notification.type === 'chat_request' && (
         <div className="notification-actions">
           <button 
             className="accept-button" 
             onClick={handleAccept}
+            disabled={isAccepting || isDeclining}
           >
-            Accept
+            {isAccepting ? 'Accepting...' : 'Accept'}
           </button>
           <button 
             className="decline-button" 
             onClick={handleDecline}
+            disabled={isAccepting || isDeclining}
           >
-            Decline
+            {isDeclining ? 'Declining...' : 'Decline'}
+          </button>
+        </div>
+      )}
+      
+      {/* For accepted chats, show open button */}
+      {notification.type === 'chat_accepted' && (
+        <div className="notification-actions">
+          <button 
+            className="open-chat-button" 
+            onClick={() => openChat(notification.chat_room_id)}
+          >
+            Open Chat
           </button>
         </div>
       )}

@@ -1,181 +1,152 @@
 .map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px;
-  background-color: #f5f5f5;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .map-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-}
-
-.map-header h3 {
-  margin: 0;
-  color: #333;
+  padding: 10px 20px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
 }
 
 .map-controls {
   display: flex;
   align-items: center;
-  gap: 15px;
 }
 
-.route-button {
-  padding: 8px 16px;
-  background-color: #4285F4;
-  color: white;
+.notification-controls {
+  display: flex;
+  align-items: center;
+  margin-right: 15px;
+}
+
+.route-button,
+.filter-button {
+  padding: 6px 12px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  margin-right: 10px;
+  background-color: #4285f4;
+  color: white;
+  font-weight: bold;
 }
 
-.route-button:hover {
-  background-color: #2b6bc5;
+.filter-button.active {
+  background-color: #4caf50;
 }
 
 .route-button.active {
-  background-color: #F44336;
+  background-color: #ff5722;
 }
 
 .route-instructions {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4285F4;
-  background-color: #E3F2FD;
-  padding: 6px 12px;
-  border-radius: 16px;
+  font-size: 0.9rem;
+  color: #777;
+  margin-right: 20px;
 }
 
 .last-updated {
-  font-size: 12px;
-  color: #666;
+  font-size: 0.9rem;
+  color: #777;
 }
 
-/* Map and markers styling */
-.leaflet-container {
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.marker-pin {
-  width: 30px;
-  height: 30px;
-  border-radius: 50% 50% 50% 0;
-  background-color: #4285F4;
-  position: absolute;
-  transform: rotate(-45deg);
-  left: 50%;
-  top: 50%;
-  margin: -15px 0 0 -15px;
-}
-
-.marker-pin::after {
-  content: '';
-  width: 20px;
-  height: 20px;
-  margin: 5px 0 0 5px;
-  background: #fff;
-  position: absolute;
-  border-radius: 50%;
-}
-
-/* Popup styling */
-.leaflet-popup-content-wrapper {
-  border-radius: 6px;
-  padding: 0;
-  overflow: hidden;
-}
-
-.leaflet-popup-content {
-  margin: 0;
-  padding: 0;
+.map-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2rem;
+  color: #777;
 }
 
 .user-popup {
-  padding: 15px;
-  width: 220px;
+  text-align: center;
 }
 
 .user-popup h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 18px;
+  margin: 0;
+  font-size: 1rem;
 }
 
 .user-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #4CAF50;
+  justify-content: center;
+  gap: 5px;
+  margin: 5px 0;
+  font-size: 0.9rem;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
+  background-color: #4caf50;
   border-radius: 50%;
-  background-color: #4CAF50;
 }
 
-.user-location, .user-last-active {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 6px;
+.user-location,
+.user-last-active {
+  font-size: 0.8rem;
+  color: #555;
 }
 
 .current-user-tag {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 5px;
+}
+
+.chat-button-container {
   margin-top: 10px;
-  background-color: #E3F2FD;
-  color: #2196F3;
-  font-size: 12px;
-  padding: 4px 8px;
+}
+
+.chat-request-button {
+  padding: 6px 12px;
+  border: none;
   border-radius: 4px;
-  display: inline-block;
+  cursor: pointer;
+  background-color: #4285f4;
+  color: white;
   font-weight: bold;
 }
 
 .path-popup {
-  padding: 15px;
-  width: 220px;
+  text-align: center;
 }
 
 .path-popup h4 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 16px;
+  margin: 0;
+  font-size: 1rem;
 }
 
 .path-popup p {
   margin: 5px 0;
-  font-size: 13px;
-  color: #666;
+  font-size: 0.9rem;
+  color: #555;
 }
 
-/* Map legend */
+.intersecting-path-notice {
+  font-size: 0.8rem;
+  color: #4caf50;
+  margin-top: 5px;
+}
+
 .map-legend {
-  background-color: white;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 10px 20px;
+  background-color: #f5f5f5;
+  border-top: 1px solid #ddd;
 }
 
 .map-legend h4 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 16px;
+  margin: 0 0 10px;
+  font-size: 1rem;
 }
 
 .legend-items {
@@ -187,36 +158,32 @@
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #555;
+  gap: 5px;
+  font-size: 0.9rem;
 }
 
 .legend-marker {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
+  display: inline-block;
 }
 
 .legend-line {
-  width: 24px;
-  height: 4px;
-  border-radius: 2px;
+  width: 20px;
+  height: 3px;
+  display: inline-block;
 }
 
-/* Map info panel */
 .map-info-panel {
-  background-color: white;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 10px 20px;
+  background-color: #fff;
+  border-top: 1px solid #ddd;
 }
 
 .map-info-panel h4 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 16px;
+  margin: 0 0 10px;
+  font-size: 1rem;
 }
 
 .map-stats {
@@ -227,20 +194,29 @@
 }
 
 .stat-item {
-  font-size: 14px;
-  color: #555;
+  font-size: 0.9rem;
+}
+
+.recent-paths {
+  margin-top: 15px;
 }
 
 .paths-list {
-  max-height: 250px;
-  overflow-y: auto;
-  border-top: 1px solid #eee;
-  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .path-item {
+  background-color: #f5f5f5;
+  border-radius: 6px;
   padding: 10px;
-  border-bottom: 1px solid #f0f0f0;
+}
+
+.path-item.intersecting {
+  background-color: #e8f5e9;
+  border-left: 3px solid #4caf50;
 }
 
 .path-header {
@@ -252,152 +228,36 @@
 .path-details {
   display: flex;
   flex-direction: column;
-  font-size: 12px;
-  color: #777;
-}
-
-/* Loading and error states */
-.map-loading {
-  height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  color: #666;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-}
-
-.no-location-data {
-  padding: 30px;
-  text-align: center;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  color: #666;
-}
-<<<<<<< HEAD
-/* Add these styles to your existing CSS file */
-
-/* Filter button styling */
-.filter-button {
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-  padding: 8px 12px;
-  margin-left: 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-}
-
-.filter-button.active {
-  background-color: #4CAF50;
-  color: white;
-  border-color: #388E3C;
-}
-
-.filter-button:hover {
-  background-color: #e0e0e0;
-}
-
-.filter-button.active:hover {
-  background-color: #388E3C;
-}
-
-/* Intersection filter info banner */
-.intersection-filter-info {
-  background-color: #E8F5E9;
-  color: #2E7D32;
-  padding: 8px 15px;
-  margin-bottom: 10px;
-  border-radius: 4px;
-  border-left: 4px solid #4CAF50;
-  font-size: 0.9rem;
-}
-
-.intersection-filter-info .no-intersections {
-  font-weight: bold;
-  color: #F44336;
-}
-
-/* Styling for intersecting paths in the list */
-.path-item.intersecting {
-  border-left: 4px solid #4CAF50;
+  gap: 3px;
+  font-size: 0.8rem;
+  color: #555;
 }
 
 .intersect-badge {
-  background-color: #4CAF50;
-  color: white;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 0.8rem;
-  display: inline-block;
-  margin-bottom: 4px;
-}
-
-/* Styling for the intersection notice in popups */
-.intersecting-path-notice {
-  color: #4CAF50;
+  color: #4caf50;
   font-weight: bold;
-  border-left: 3px solid #4CAF50;
-  padding-left: 8px;
-  margin: 6px 0;
-=======
-
-/* Add to your existing CSS */
-
-.notification-controls {
-  position: relative;
-  margin-left: 15px;
+  font-size: 0.8rem;
+  margin-bottom: 5px;
 }
 
-.notification-button {
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-  color: #333;
-  padding: 5px 10px;
-  position: relative;
-}
-
-.notification-badge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  background-color: #FF5722;
-  color: white;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
+.intersection-filter-info {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 8px 15px;
+  margin: 0px 20px 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  font-weight: bold;
+  gap: 8px;
 }
 
-.chat-button-container {
-  margin-top: 10px;
-  display: flex;
-  justify-content: center;
+.no-intersections {
+  font-style: italic;
+  margin-left: 5px;
 }
 
-.chat-request-button {
-  background-color: #4285F4;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.chat-request-button:hover {
-  background-color: #3367d6;
-}
-/* Add these styles to your existing UserLocationMap.css file */
-
+/* Active chats styling */
 .active-chats {
   margin-top: 20px;
   border-top: 1px solid #eee;
@@ -460,5 +320,38 @@
   padding: 10px;
   background-color: #f9f9f9;
   border-radius: 6px;
->>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
+}
+
+
+
+.refresh-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background-color: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.refresh-button:hover {
+  background-color: #e0e0e0;
+}
+
+.refresh-button:active {
+  background-color: #d0d0d0;
+}
+
+.refresh-button svg {
+  color: #333;
+  font-size: 16px;
+}
+
+.no-users-message {
+  font-size: 14px;
+  color: #555;
+  text-align: center;
 }
