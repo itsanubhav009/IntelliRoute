@@ -430,31 +430,31 @@ const parseWKTLineString = (wkt) => {
 };
 
 // Helper to check if two paths intersect
-const doPathsIntersect = (path1WKT, path2WKT) => {
-  const path1Points = parseWKTLineString(path1WKT);
-  const path2Points = parseWKTLineString(path2WKT);
+// const doPathsIntersect = (path1WKT, path2WKT) => {
+//   const path1Points = parseWKTLineString(path1WKT);
+//   const path2Points = parseWKTLineString(path2WKT);
   
-  if (path1Points.length < 2 || path2Points.length < 2) {
-    return false; // Not enough points for intersection
-  }
+//   if (path1Points.length < 2 || path2Points.length < 2) {
+//     return false; // Not enough points for intersection
+//   }
   
-  // Check each line segment in path1 against each line segment in path2
-  for (let i = 0; i < path1Points.length - 1; i++) {
-    const line1Start = path1Points[i];
-    const line1End = path1Points[i + 1];
+//   // Check each line segment in path1 against each line segment in path2
+//   for (let i = 0; i < path1Points.length - 1; i++) {
+//     const line1Start = path1Points[i];
+//     const line1End = path1Points[i + 1];
     
-    for (let j = 0; j < path2Points.length - 1; j++) {
-      const line2Start = path2Points[j];
-      const line2End = path2Points[j + 1];
+//     for (let j = 0; j < path2Points.length - 1; j++) {
+//       const line2Start = path2Points[j];
+//       const line2End = path2Points[j + 1];
       
-      if (doLineSegmentsIntersect(line1Start, line1End, line2Start, line2End)) {
-        return true; // Intersection found
-      }
-    }
-  }
+//       if (doLineSegmentsIntersect(line1Start, line1End, line2Start, line2End)) {
+//         return true; // Intersection found
+//       }
+//     }
+//   }
   
-  return false; // No intersections found
-};
+//   return false; // No intersections found
+// };
 
 // Update the /path/live GET endpoint to handle intersection filtering
 router.get('/live', async (req, res) => {
