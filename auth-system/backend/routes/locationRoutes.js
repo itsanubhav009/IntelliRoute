@@ -22,7 +22,8 @@ const addDelay = (ms = 2000) => {
 
 // Middleware to log all requests
 router.use((req, res, next) => {
-  console.log(`${req.method} ${req.path} - User ID: ${req.user?.id || 'unknown'}`);
+  const userId = req.user ? req.user.id : 'unknown';
+  console.log(`${req.method} ${req.path} - User ID: ${userId}`);
   next();
 });
 
@@ -36,8 +37,8 @@ router.post('/update', async (req, res) => {
     // Add artificial delay as requested
     await addDelay(2000);
     
-    const userId = req.user?.id;
-    const username = req.user?.username || 'Unknown';
+    const userId = req.user ? req.user.id : null;
+    const username = req.user ? (req.user.username || 'Unknown') : 'Unknown';
     const { latitude, longitude } = req.body;
     
     const timestamp = new Date().toISOString();
@@ -61,7 +62,47 @@ router.post('/update', async (req, res) => {
       try {
         console.log('Attempting Supabase update for user:', userId);
         
-        // Update user location and set them as ONLINE
+        // FIRST - Check if user profile exists, if not create it
+        const { data: existingUser, error: checkError } = await databaseClient
+          .from('profiles')
+          .select('id')
+          .eq('id', userId);
+          
+        if (checkError) {
+          console.error('Error checking user profile:', checkError);
+          throw checkError;
+        }
+        
+        // If user doesn't exist in profiles table, create a new profile
+        if (!existingUser || existingUser.length === 0) {
+          console.log(`User ${userId} not found in profiles table. Creating new profile.`);
+          
+          const { data: newProfile, error: insertError } = await databaseClient
+            .from('profiles')
+            .insert([{
+              id: userId,
+              username: username,
+              status: 'online',
+              last_active: new Date().toISOString(),
+              latitude: parseFloat(latitude),
+              longitude: parseFloat(longitude)
+            }])
+            .select();
+            
+          if (insertError) {
+            console.error('Error creating user profile:', insertError);
+            throw insertError;
+          }
+          
+          console.log(`Created new profile for user ${userId}`);
+          return res.json({
+            message: 'New profile created with location',
+            user: newProfile[0],
+            method: 'supabase'
+          });
+        }
+        
+        // Update existing user location and set them as ONLINE
         const { data, error } = await databaseClient
           .from('profiles')
           .update({
@@ -122,7 +163,7 @@ router.post('/offline', async (req, res) => {
     // Add artificial delay as requested
     await addDelay(1000);
     
-    const userId = req.user?.id;
+    const userId = req.user ? req.user.id : null;
     
     if (!userId) {
       return res.status(401).json({ message: 'User ID not found in request' });
@@ -177,7 +218,6 @@ router.post('/offline', async (req, res) => {
 });
 
 // GET /api/location/live - Get all ONLINE user locations
-// GET /api/location/live - Get all ONLINE user locations
 router.get('/live', async (req, res) => {
   try {
     // Add artificial delay as requested
@@ -186,31 +226,76 @@ router.get('/live', async (req, res) => {
     // Try using Supabase if available
     if (databaseClient && typeof databaseClient.from === 'function') {
       try {
-        console.log('Fetching online users with locations');
+        console.log('Fetching online users with locations - DEBUG QUERY');
         
-        // UPDATED QUERY - Wider time window and less restrictive conditions
-        // Get users who:
-        // 1. Have been active in the last 30 minutes (instead of 5)
-        // 2. Have location data
-        // 3. Status check is now optional
+        // Remove the status filter that might be causing issues
         const thirtyMinutesAgo = new Date();
         thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
         
+        // Debug by getting the current user specifically
+        const { data: debugUser } = await databaseClient
+          .from('profiles')
+          .select('id, username, status, latitude, longitude, last_active')
+          .eq('id', req.user.id);
+        
+        if (debugUser && debugUser.length > 0) {
+          console.log('Current user data:', debugUser[0]);
+        } else {
+          console.log('Current user not found in profiles! Creating a default entry.');
+          
+          // Create an entry for the current user if one doesn't exist
+          const { data: newUser, error: insertError } = await databaseClient
+            .from('profiles')
+            .insert([{
+              id: req.user.id,
+              username: req.user.username || 'Unknown',
+              status: 'online',
+              last_active: new Date().toISOString()
+            }])
+            .select();
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+          } else {
+            console.log('Created new profile:', newUser[0]);
+          }
+        }
+        
+        // Simpler query - just get recent users with location data
         const { data, error } = await databaseClient
           .from('profiles')
           .select('id, username, latitude, longitude, last_active, status')
-          .gt('last_active', thirtyMinutesAgo.toISOString())
-          .not('latitude', 'is', null)
-          .not('longitude', 'is', null);
-          
+          .gt('last_active', thirtyMinutesAgo.toISOString());
+        
         if (error) {
           console.error('Supabase query error:', error);
           throw error;
         }
         
-        console.log(`Found ${data.length} active users with locations`);
+        // Filter after querying to see what we're getting
+        const usersWithLocation = data.filter(user => 
+          user.latitude && 
+          user.longitude && 
+          parseFloat(user.latitude) !== 0 && 
+          parseFloat(user.longitude) !== 0);
+        
+        // Log detailed information about returned users
+        usersWithLocation.forEach(user => {
+          console.log(`Found user with location: ${user.username} (${user.id}), status: ${user.status}, coordinates: ${user.latitude},${user.longitude}`);
+        });
+        
+        console.log(`Found ${usersWithLocation.length} users with locations out of ${data.length} active users`);
+        
+        // If current user is missing from the results despite having location data, add them manually
+        const currentUserInResults = usersWithLocation.some(user => user.id === req.user.id);
+        if (!currentUserInResults && debugUser && debugUser.length > 0 && debugUser[0].latitude && debugUser[0].longitude) {
+          console.log('Adding current user to results manually');
+          usersWithLocation.push(debugUser[0]);
+        }
+        
+        // Return the filtered list
         return res.json({ 
-          data,
+          data: usersWithLocation,
           method: 'supabase'
         });
       } catch (supabaseError) {
@@ -219,8 +304,8 @@ router.get('/live', async (req, res) => {
       }
     }
     
-    // Fallback to memory database - get all users with recent activity
-    const users = memoryDB.getAllUsers();
+    // Fallback to memory database - get only online users
+    const users = memoryDB.getOnlineUsers();
     
     return res.json({ 
       data: users,
