@@ -2,13 +2,19 @@ import React, { useEffect, useState, useContext, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { LocationContext } from '../context/LocationContext';
 import { AuthContext } from '../context/AuthContext';
+import { ChatContext } from '../context/ChatContext';
+import ChatDialog from './ChatDialog';
+import NotificationsPanel from './NotificationsPanel';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './UserLocationMap.css';
-
+import NotificationButton from './NotificationButton';
 // Fix for default icons
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faComments } from '@fortawesome/free-solid-svg-icons';
+
 
 let DefaultIcon = L.icon({
   iconUrl: icon,
@@ -143,27 +149,89 @@ const UserLocationMap = () => {
     toggleIntersectionFilter 
   } = useContext(LocationContext);
   const { user } = useContext(AuthContext);
+  // Get all the chat context values we need including activeChats
+  const { 
+    sendChatRequest, 
+    notifications, 
+    currentChat, 
+    openChat,
+    activeChats,
+    fetchActiveChats
+  } = useContext(ChatContext);
+  
   const [usersWithLocation, setUsersWithLocation] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [pathsWithCoordinates, setPathsWithCoordinates] = useState([]);
   const [routeMode, setRouteMode] = useState(false);
   const [selectedSource, setSelectedSource] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const mapRef = useRef(null);
 
+  // Chat request handler
+  const handleChatRequest = (userId) => {
+    if (userId === user.id) {
+      // Don't allow chatting with yourself
+      return;
+    }
+    
+    sendChatRequest(userId)
+      .then((response) => {
+        console.log('Chat request sent successfully:', response);
+      })
+      .catch((error) => {
+        console.error('Failed to send chat request:', error);
+      });
+  };
+
+  // Fetch active chats on component mount
   useEffect(() => {
+    if (user && fetchActiveChats) {
+      fetchActiveChats();
+    }
+  }, [user, fetchActiveChats]);
+
+  useEffect(() => {
+    let isMounted = true;
+    
     const loadMapData = async () => {
-      setIsLoading(true);
-      await Promise.all([fetchLiveUsers(), fetchLivePaths()]);
-      setLastUpdated(new Date());
-      setIsLoading(false);
+      if (!isMounted || isLoading) return;
+      
+      console.log(`Map data refresh at ${new Date().toLocaleTimeString()}`);
+      
+      try {
+        // Only update if too much time has passed since last update
+        const timeSinceUpdate = new Date() - lastUpdated;
+        if (timeSinceUpdate > 25000) { // 25 seconds minimum
+          setIsLoading(true);
+          await fetchLiveUsers();
+          await fetchLivePaths();
+          setLastUpdated(new Date());
+        } else {
+          console.log(`Skipping refresh - only ${Math.round(timeSinceUpdate/1000)}s since last update`);
+        }
+      } catch (error) {
+        console.error('Error refreshing map data:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
 
+    // Initial load
     loadMapData();
     const intervalId = setInterval(loadMapData, 30000); // Reduced to 30 seconds
     
-    return () => clearInterval(intervalId);
-  }, [fetchLiveUsers, fetchLivePaths]);
+    // Set up a controlled interval with a single timer
+    // Use 30 seconds to reduce server load
+   // const intervalId = setInterval(loadMapData, 30000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [fetchLiveUsers, fetchLivePaths, lastUpdated, isLoading]);
 
   useEffect(() => {
     if (liveUsers) {
@@ -220,8 +288,8 @@ const UserLocationMap = () => {
   let centerLat = 0, centerLng = 0;
   
   if (usersWithLocation.length > 0) {
-    centerLat = usersWithLocation.reduce((sum, u) => sum + u.latitude, 0) / usersWithLocation.length;
-    centerLng = usersWithLocation.reduce((sum, u) => sum + u.longitude, 0) / usersWithLocation.length;
+    centerLat = usersWithLocation.reduce((sum, u) => sum + parseFloat(u.latitude || 0), 0) / usersWithLocation.length;
+    centerLng = usersWithLocation.reduce((sum, u) => sum + parseFloat(u.longitude || 0), 0) / usersWithLocation.length;
   } else {
     // Default to a central location if no users
     centerLat = 0;
@@ -230,15 +298,14 @@ const UserLocationMap = () => {
 
   return (
     <div className="map-container">
-      <div className="map-header">
-        <h3>Live User Map</h3>
-        <div className="map-controls">
-          <button 
-            className={`route-button ${routeMode ? 'active' : ''}`} 
-            onClick={toggleRouteMode}
-          >
-            {routeMode ? 'Cancel Route' : 'Create Route'}
-          </button>
+     <div className="map-header">
+      <h3>Live User Map</h3>
+      <div className="map-controls">
+        <div className="notification-controls">
+          <NotificationButton 
+            notificationCount={notifications ? notifications.length : 0}
+            onClick={() => setShowNotifications(!showNotifications)}
+          />
           
           {/* New intersection filter toggle button */}
           <button
@@ -252,16 +319,28 @@ const UserLocationMap = () => {
           {routeMode && !selectedSource && (
             <div className="route-instructions">Click on map to set starting point</div>
           )}
-          
-          {routeMode && selectedSource && (
-            <div className="route-instructions">Click on map to set destination</div>
-          )}
-          
-          <span className="last-updated">
-            Last updated: {formatTime(lastUpdated)}
-          </span>
         </div>
+        
+        <button 
+          className={`route-button ${routeMode ? 'active' : ''}`} 
+          onClick={toggleRouteMode}
+        >
+          {routeMode ? 'Cancel Route' : 'Create Route'}
+        </button>
+        
+        {routeMode && !selectedSource && (
+          <div className="route-instructions">Click on map to set starting point</div>
+        )}
+        
+        {routeMode && selectedSource && (
+          <div className="route-instructions">Click on map to set destination</div>
+        )}
+        
+        <span className="last-updated">
+          Last updated: {formatTime(lastUpdated)}
+        </span>
       </div>
+    </div>
       
       {/* Intersection filter info message */}
       {showIntersectingOnly && (
@@ -297,7 +376,7 @@ const UserLocationMap = () => {
         {usersWithLocation.map(u => (
           <Marker 
             key={`user-${u.id}`} 
-            position={[u.latitude, u.longitude]}
+            position={[parseFloat(u.latitude), parseFloat(u.longitude)]}
             icon={createCustomIcon(u.id === user?.id ? '#4285F4' : '#FF5722')}
           >
             <Popup>
@@ -308,19 +387,28 @@ const UserLocationMap = () => {
                   Online
                 </div>
                 <div className="user-location">
-                  Coordinates: {u.latitude.toFixed(4)}, {u.longitude.toFixed(4)}
+                  Coordinates: {parseFloat(u.latitude).toFixed(4)}, {parseFloat(u.longitude).toFixed(4)}
                 </div>
                 <div className="user-last-active">
                   Last active: {formatTime(u.last_active)}
                 </div>
-                {u.id === user?.id && (
+                {u.id === user?.id ? (
                   <div className="current-user-tag">This is you</div>
+                ) : (
+                  <div className="chat-button-container">
+                    <button 
+                      className="chat-request-button"
+                      onClick={() => handleChatRequest(u.id)}
+                    >
+                      Chat with {u.username}
+                    </button>
+                  </div>
                 )}
               </div>
             </Popup>
           </Marker>
         ))}
-        
+
         {/* Display route source marker if in route mode */}
         {routeMode && selectedSource && (
           <Marker 
@@ -401,7 +489,7 @@ const UserLocationMap = () => {
         </div>
       </div>
 
-      {/* Display path information */}
+      {/* Display path information and active chats panel */}
       <div className="map-info-panel">
         <h4>Statistics</h4>
         <div className="map-stats">
@@ -419,6 +507,35 @@ const UserLocationMap = () => {
               <strong>Filter:</strong> Showing intersecting paths only
             </div>
           )}
+        </div>
+        
+        {/* New Active Chats Panel */}
+        <div className="active-chats">
+          <h4>
+            <FontAwesomeIcon icon={faComments} /> Active Chats
+          </h4>
+          <div className="chats-list">
+            {activeChats && activeChats.length > 0 ? (
+              activeChats.map(chat => (
+                <div 
+                  key={chat.id} 
+                  className="chat-item"
+                  onClick={() => openChat(chat.id)}
+                >
+                  <div className="chat-user">
+                    {chat.otherParticipants && chat.otherParticipants.length > 0 
+                      ? chat.otherParticipants[0].username 
+                      : 'Unknown User'}
+                  </div>
+                  {chat.unreadCount > 0 && (
+                    <span className="unread-badge">{chat.unreadCount}</span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="no-chats">No active chats</div>
+            )}
+          </div>
         </div>
         
         {pathsWithCoordinates.length > 0 && (
@@ -455,6 +572,9 @@ const UserLocationMap = () => {
           </div>
         )}
       </div>
+      
+      {/* Chat dialog */}
+      {currentChat && <ChatDialog />}
     </div>
   );
 };

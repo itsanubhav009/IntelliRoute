@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import api from '../utils/api';
 import { AuthContext } from './AuthContext';
 
@@ -13,6 +13,15 @@ export const LocationProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [showIntersectingOnly, setShowIntersectingOnly] = useState(false);
+<<<<<<< HEAD
+=======
+  
+  // Add these refs to track fetch timing
+  const fetchTimers = useRef({
+    users: 0,
+    paths: 0
+  });
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
 
   // Update the user's location
   const updateLocation = async (latitude, longitude) => {
@@ -65,11 +74,16 @@ export const LocationProvider = ({ children }) => {
     setShowIntersectingOnly(newValue);
     
     // Refresh paths with the new filter setting
+<<<<<<< HEAD
     fetchLivePaths(newValue);
+=======
+    fetchLivePaths();
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
     
     return newValue;
   };
 
+<<<<<<< HEAD
   // Fetch paths data for online users, with optional intersection filtering
   const fetchLivePaths = async (intersectOnly = showIntersectingOnly) => {
     setIsLoading(true);
@@ -82,14 +96,34 @@ export const LocationProvider = ({ children }) => {
       if (intersectOnly) {
         console.log('Intersection filter active, showing only paths that cross your route');
       }
+=======
+  // Fetch paths data for online users
+  const fetchLivePaths = async () => {
+    // Prevent calling too frequently
+    const now = Date.now();
+    if (now - fetchTimers.current.paths < 20000) {
+      console.log(`Skipping fetchLivePaths - too soon (${Math.round((now - fetchTimers.current.paths)/1000)}s)`);
+      return livePaths;
+    }
+  
+    setIsLoading(true);
+    try {
+      console.log(`Fetching live paths at ${new Date().toISOString()}`);
+      const response = await api.get(`/path/live?intersectOnly=${showIntersectingOnly}`);
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
       
+      fetchTimers.current.paths = now;
       setLivePaths(response.data.data || []);
       setLastUpdated(new Date());
+<<<<<<< HEAD
+=======
+      
+      console.log(`Fetched ${response.data.data?.length || 0} paths`);
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
       return response.data.data;
     } catch (error) {
       console.error('Error fetching paths:', error);
       setError('Failed to fetch paths');
-      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -97,17 +131,34 @@ export const LocationProvider = ({ children }) => {
 
   // Fetch all active users' locations
   const fetchLiveUsers = async () => {
+    // Prevent calling too frequently
+    const now = Date.now();
+    if (now - fetchTimers.current.users < 20000) {
+      console.log(`Skipping fetchLiveUsers - too soon (${Math.round((now - fetchTimers.current.users)/1000)}s)`);
+      return liveUsers;
+    }
+    
     setIsLoading(true);
     try {
+<<<<<<< HEAD
       const response = await api.get('/location/live');
       setLiveUsers(response.data.data || []);
       setLastUpdated(new Date());
       console.log(`Fetched ${response.data.data?.length || 0} online users`);
+=======
+      console.log(`Fetching live users at ${new Date().toISOString()}`);
+      const response = await api.get('/location/live');
+      
+      fetchTimers.current.users = now;
+      setLiveUsers(response.data.data || []);
+      setLastUpdated(new Date());
+      
+      console.log(`Fetched ${response.data.data?.length || 0} active users`);
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
       return response.data.data;
     } catch (error) {
-      console.error('Error fetching online users:', error);
-      setError('Failed to fetch online users');
-      throw error;
+      console.error('Error fetching users:', error);
+      setError('Failed to fetch users');
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +197,11 @@ export const LocationProvider = ({ children }) => {
       const intervalId = setInterval(() => {
         fetchLiveUsers().catch(err => console.error('Failed to fetch users:', err));
         fetchLivePaths().catch(err => console.error('Failed to fetch paths:', err));
+<<<<<<< HEAD
       }, 30000); // Use 30 seconds to reduce refreshing frequency
+=======
+      }, 30000); // Use 30-second interval
+>>>>>>> 6e2e8e56a61c3b9a993f72753bbe9f72d076c073
       
       return () => clearInterval(intervalId);
     }

@@ -16,6 +16,41 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 // Add this before your routes
+// Add this before your route handlers
+// Add this to your existing routes
+const chatRoutes = require('./routes/chatRoutes');
+app.use('/api/chat', chatRoutes);
+// Global middleware for request diagnostic logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  // Log the start of the request
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - START`);
+  
+  // When the response finishes, log the response time
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - COMPLETE (${duration}ms)`);
+  });
+  
+  // Track auth token presence
+  const hasToken = req.headers.authorization && req.headers.authorization.startsWith('Bearer');
+  console.log(`[DEBUG] Request has auth token: ${hasToken ? 'Yes' : 'No'}`);
+  
+  next();
+});
+
+// Add this to your error handler to improve error logging
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.path}:`, err.stack);
+  
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  res.status(statusCode);
+  res.json({
+    message: err.message,
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack
+  });
+});
 app.use((req, res, next) => {
   // Extract token from header
   const authHeader = req.headers.authorization;

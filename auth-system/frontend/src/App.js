@@ -8,11 +8,13 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import LiveUsersPage from './pages/LiveUsersPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import { ChatProvider } from './context/ChatContext';
 import './App.css';
 
 function App() {
   return (
     <AuthProvider>
+      <ChatProvider>
       <LocationProvider>
         <Router>
           <div className="app">
@@ -33,6 +35,7 @@ function App() {
           </div>
         </Router>
       </LocationProvider>
+      </ChatProvider>
     </AuthProvider>
   );
 }
