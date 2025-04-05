@@ -355,3 +355,143 @@
   color: #555;
   text-align: center;
 }
+/* Add these styles to your existing UserLocationMap.css */
+
+.debug-banner {
+  background-color: #ffeb3b;
+  color: #333;
+  padding: 10px;
+  margin: 10px 20px;
+  border-radius: 4px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 100px;
+  font-size: 12px;
+}
+
+.custom-div-icon {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.marker-pin {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #4285F4;
+  border: 2px solid white;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+}
+
+.no-users-message {
+  font-size: 14px;
+  color: #555;
+  text-align: center;
+  background-color: white;
+  padding: 10px 15px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+.map-loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin: 20px;
+}
+
+.map-loading-screen svg {
+  font-size: 3rem;
+  color: #4285F4;
+  margin-bottom: 20px;
+}
+
+.map-loading-screen h3 {
+  margin: 0 0 15px;
+  color: #333;
+}
+
+.map-loading-screen p {
+  color: #666;
+  max-width: 300px;
+  text-align: center;
+}
+
+.map-title {
+  display: flex;
+  align-items: center;
+}
+
+.map-user-info {
+  display: flex;
+  margin-left: 20px;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.map-user-info .date-time {
+  margin-right: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-user-info .user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.map-user-info .username {
+  font-weight: bold;
+  color: #4285F4;
+}
+
+.user-count-info {
+  padding: 8px 20px;
+  background-color: #f8f8f8;
+  border-bottom: 1px solid #eee;
+}
+
+.no-users-warning {
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+.user-count {
+  color: #388e3c;
+}
+
+.custom-div-icon {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.marker-pin {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+}
+
+.map-legend h4 {
+  margin-top: 15px;
+}
+
+/* Ensure the marker stays visible with proper z-index */
+.leaflet-marker-icon {
+  z-index: 1000 !important;
+}
+
+.leaflet-marker-shadow {
+  z-index: 999 !important;
+}
