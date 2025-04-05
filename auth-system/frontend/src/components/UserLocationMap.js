@@ -133,7 +133,15 @@ function MapClickHandler({ routeMode, selectedSource, setSelectedSource, createP
 }
 
 const UserLocationMap = () => {
-  const { liveUsers, fetchLiveUsers, livePaths, fetchLivePaths, createPath } = useContext(LocationContext);
+  const { 
+    liveUsers, 
+    fetchLiveUsers, 
+    livePaths, 
+    fetchLivePaths, 
+    createPath, 
+    showIntersectingOnly, 
+    toggleIntersectionFilter 
+  } = useContext(LocationContext);
   const { user } = useContext(AuthContext);
   const [usersWithLocation, setUsersWithLocation] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,7 +160,7 @@ const UserLocationMap = () => {
     };
 
     loadMapData();
-    const intervalId = setInterval(loadMapData, 30000); // Refresh every 30 seconds
+    const intervalId = setInterval(loadMapData, 30000); // Reduced to 30 seconds
     
     return () => clearInterval(intervalId);
   }, [fetchLiveUsers, fetchLivePaths]);
@@ -187,6 +195,10 @@ const UserLocationMap = () => {
     createPath(source, destination);
     setRouteMode(false);
     setSelectedSource(null);
+  };
+
+  const handleToggleIntersectionFilter = () => {
+    toggleIntersectionFilter();
   };
 
   const formatTime = (date) => {
@@ -228,6 +240,15 @@ const UserLocationMap = () => {
             {routeMode ? 'Cancel Route' : 'Create Route'}
           </button>
           
+          {/* New intersection filter toggle button */}
+          <button
+            className={`filter-button ${showIntersectingOnly ? 'active' : ''}`}
+            onClick={handleToggleIntersectionFilter}
+            title="Show only paths that intersect with your route"
+          >
+            {showIntersectingOnly ? 'Show All Paths' : 'Show Intersecting Only'}
+          </button>
+          
           {routeMode && !selectedSource && (
             <div className="route-instructions">Click on map to set starting point</div>
           )}
@@ -241,6 +262,17 @@ const UserLocationMap = () => {
           </span>
         </div>
       </div>
+      
+      {/* Intersection filter info message */}
+      {showIntersectingOnly && (
+        <div className="intersection-filter-info">
+          <i className="fas fa-info-circle"></i> 
+          Showing only paths that intersect with your route. 
+          {pathsWithCoordinates.length === 0 && (
+            <span className="no-intersections"> No intersecting paths found.</span>
+          )}
+        </div>
+      )}
       
       <MapContainer 
         center={[centerLat, centerLng]} 
@@ -304,7 +336,8 @@ const UserLocationMap = () => {
           <Polyline 
             key={`path-${path.id || idx}`} 
             positions={path.parsedRoute} 
-            color={path.user_id === user?.id ? '#2196F3' : '#FF5722'} 
+            // Use a special color for intersecting paths
+            color={path.user_id === user?.id ? '#2196F3' : (path.intersects_with_user ? '#4CAF50' : '#FF5722')} 
             weight={4}
             opacity={0.7}
           >
@@ -313,6 +346,9 @@ const UserLocationMap = () => {
                 <h4>Route Information</h4>
                 <p><strong>User:</strong> {path.username || 'Unknown'}</p>
                 <p><strong>Created:</strong> {formatTime(path.created_at)}</p>
+                {path.intersects_with_user && (
+                  <p className="intersecting-path-notice">This path intersects with your route!</p>
+                )}
                 {path.parsedRoute.length > 0 && (
                   <>
                     <p><strong>From:</strong> {path.parsedRoute[0][0].toFixed(4)}, {path.parsedRoute[0][1].toFixed(4)}</p>
@@ -345,7 +381,12 @@ const UserLocationMap = () => {
           </div>
           <div className="legend-item">
             <div className="legend-line" style={{ backgroundColor: '#2196F3' }}></div>
-            <span>Your paths</span>
+            <span>Your path</span>
+          </div>
+          {/* New legend item for intersecting paths */}
+          <div className="legend-item">
+            <div className="legend-line" style={{ backgroundColor: '#4CAF50' }}></div>
+            <span>Intersecting paths</span>
           </div>
           <div className="legend-item">
             <div className="legend-line" style={{ backgroundColor: '#FF5722' }}></div>
@@ -373,6 +414,11 @@ const UserLocationMap = () => {
           <div className="stat-item">
             <strong>Last Updated:</strong> {formatTime(lastUpdated)}
           </div>
+          {showIntersectingOnly && (
+            <div className="stat-item">
+              <strong>Filter:</strong> Showing intersecting paths only
+            </div>
+          )}
         </div>
         
         {pathsWithCoordinates.length > 0 && (
@@ -380,12 +426,15 @@ const UserLocationMap = () => {
             <h4>Recent Paths</h4>
             <div className="paths-list">
               {pathsWithCoordinates.slice(0, 5).map((path, idx) => (
-                <div key={idx} className="path-item">
+                <div key={idx} className={`path-item ${path.intersects_with_user ? 'intersecting' : ''}`}>
                   <div className="path-header">
                     <strong>{path.username || 'Unknown user'}</strong>
                     <span>{formatTime(path.created_at)}</span>
                   </div>
                   <div className="path-details">
+                    {path.intersects_with_user && (
+                      <div className="intersect-badge">Intersects with your route</div>
+                    )}
                     {path.parsedRoute.length > 0 && (
                       <>
                         <small>

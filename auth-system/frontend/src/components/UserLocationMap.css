@@ -275,3 +275,70 @@
   border-radius: 8px;
   color: #666;
 }
+/* Add these styles to your existing CSS file */
+
+/* Filter button styling */
+.filter-button {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 8px 12px;
+  margin-left: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.filter-button.active {
+  background-color: #4CAF50;
+  color: white;
+  border-color: #388E3C;
+}
+
+.filter-button:hover {
+  background-color: #e0e0e0;
+}
+
+.filter-button.active:hover {
+  background-color: #388E3C;
+}
+
+/* Intersection filter info banner */
+.intersection-filter-info {
+  background-color: #E8F5E9;
+  color: #2E7D32;
+  padding: 8px 15px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  border-left: 4px solid #4CAF50;
+  font-size: 0.9rem;
+}
+
+.intersection-filter-info .no-intersections {
+  font-weight: bold;
+  color: #F44336;
+}
+
+/* Styling for intersecting paths in the list */
+.path-item.intersecting {
+  border-left: 4px solid #4CAF50;
+}
+
+.intersect-badge {
+  background-color: #4CAF50;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+
+/* Styling for the intersection notice in popups */
+.intersecting-path-notice {
+  color: #4CAF50;
+  font-weight: bold;
+  border-left: 3px solid #4CAF50;
+  padding-left: 8px;
+  margin: 6px 0;
+}
