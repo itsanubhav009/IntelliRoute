@@ -1,63 +1,69 @@
 .custom-notification-btn {
-    position: relative;
-    width: 36px;
-    height: 36px;
-    background: #f0f0f0;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    transition: background-color 0.2s;
-  }
-  
-  .custom-notification-btn:hover {
-    background-color: #e0e0e0;
-  }
-  
-  .bell-icon {
-    position: relative;
-    width: 18px;
-    height: 18px;
-  }
-  
-  .bell-top {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 6px;
-    height: 3px;
-    background-color: #333;
-    border-radius: 3px 3px 0 0;
-  }
-  
-  .bell-body {
-    position: absolute;
-    top: 3px;
-    left: 0;
-    width: 18px;
-    height: 15px;
-    background-color: #333;
-    border-radius: 9px 9px 9px 9px;
-    clip-path: polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%);
-  }
-  
-  .notification-count {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    min-width: 16px;
-    height: 16px;
-    background-color: #FF5722;
-    color: white;
-    font-size: 10px;
-    font-weight: bold;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px;
-  }
+  position: relative;
+  width: 40px;
+  height: 40px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.2s;
+  margin-right: 10px;
+  z-index: 5;
+}
+
+.custom-notification-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.custom-notification-btn:active {
+  background-color: #d0d0d0;
+}
+
+.bell-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.bell-top {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 3px;
+  background-color: #333;
+  border-radius: 3px 3px 0 0;
+}
+
+.bell-body {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 18px;
+  height: 15px;
+  background-color: #333;
+  border-radius: 9px 9px 9px 9px;
+  clip-path: polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%);
+}
+
+.notification-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  background-color: #FF5722;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}

@@ -13,16 +13,24 @@ import NotificationButton from './NotificationButton';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+<<<<<<< HEAD
 import { faComments, faSync } from '@fortawesome/free-solid-svg-icons';
 
 // Define default Leaflet icon
 let DefaultIcon = L.icon({
+=======
+import { faComments, faSync, faSpinner } from '@fortawesome/free-solid-svg-icons';
+
+// Define default Leaflet icon - make sure it works correctly
+const DefaultIcon = L.icon({
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
   iconUrl: icon,
   shadowUrl: iconShadow,
   iconSize: [25, 41],
   iconAnchor: [12, 41]
 });
 
+// Properly set the default icon globally
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Helper to parse route data from PostGIS or OSRM
@@ -136,6 +144,7 @@ function MapClickHandler({ routeMode, selectedSource, setSelectedSource, createP
   return null;
 }
 
+<<<<<<< HEAD
 // Fixed TestMarkers component to ensure markers render
 function TestMarkers() {
   return (
@@ -156,6 +165,24 @@ function TestMarkers() {
         </Marker>
       ))}
     </>
+=======
+// Component to display current date and active user info
+function MapUserInfo({ user }) {
+  const currentDate = new Date().toISOString().slice(0, 10);
+  const currentTime = new Date().toTimeString().slice(0, 8);
+  
+  return (
+    <div className="map-user-info">
+      <div className="date-time">
+        <span>{currentDate}</span>
+        <span>{currentTime}</span>
+      </div>
+      <div className="user-info">
+        <span>Logged in as:</span>
+        <span className="username">{user?.username || "Guest"}</span>
+      </div>
+    </div>
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
   );
 }
 
@@ -191,11 +218,21 @@ const UserLocationMap = () => {
   const [routeMode, setRouteMode] = useState(false);
   const [selectedSource, setSelectedSource] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
+<<<<<<< HEAD
   const [showTestMarkers, setShowTestMarkers] = useState(true); // Enable test markers
   const mapRef = useRef(null);
   const mapCenter = useRef([37.7749, -122.4194]); // Default to San Francisco
 
   // Fixed createCustomIcon function - moved inside component
+=======
+  const [mapReady, setMapReady] = useState(false);
+  const [dataFetched, setDataFetched] = useState(false);
+  
+  const mapRef = useRef(null);
+  const mapCenter = useRef([37.7749, -122.4194]); // Default to San Francisco
+
+  // Create custom icon function
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
   const createCustomIcon = (color) => {
     return L.divIcon({
       className: 'custom-div-icon',
@@ -204,6 +241,7 @@ const UserLocationMap = () => {
       iconAnchor: [15, 42]
     });
   };
+<<<<<<< HEAD
 
   // Add a debug effect to log user data for troubleshooting
   useEffect(() => {
@@ -220,6 +258,8 @@ const UserLocationMap = () => {
       setDebugContent(JSON.stringify(userSample, null, 2));
     }
   }, [liveUsers]);
+=======
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
 
   // Chat request handler
   const handleChatRequest = (userId) => {
@@ -281,6 +321,7 @@ const UserLocationMap = () => {
     }
   }, [user, fetchActiveChats]);
 
+<<<<<<< HEAD
   // Effect for initial data load and periodic updates
   useEffect(() => {
     if (!user) return;
@@ -304,31 +345,30 @@ const UserLocationMap = () => {
     
     // Then set up regular polling
     let isMounted = true;
+=======
+  // IMPORTANT: Two-step loading process - first fetch data, then initialize map
+  useEffect(() => {
+    if (!user) return;
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
     
-    const loadMapData = async () => {
-      if (!isMounted || isLoading) return;
-      
-      console.log(`Map data refresh at ${new Date().toLocaleTimeString()}`);
+    // Step 1: Fetch initial data
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      console.log('Loading initial data...');
       
       try {
-        // Only update if too much time has passed since last update
-        const timeSinceUpdate = new Date() - lastUpdated;
-        if (timeSinceUpdate > 25000) { // 25 seconds minimum
-          setIsLoading(true);
-          await fetchLiveUsers();
-          await fetchLivePaths();
-          setLastUpdated(new Date());
-        } else {
-          console.log(`Skipping refresh - only ${Math.round(timeSinceUpdate/1000)}s since last update`);
-        }
+        // Use Promise.all to load both data types in parallel
+        const [users, paths] = await Promise.all([fetchLiveUsers(), fetchLivePaths()]);
+        console.log(`Initial load complete: ${users?.length || 0} users, ${paths?.length || 0} paths`);
+        setLastUpdated(new Date());
+        setDataFetched(true);
       } catch (error) {
-        console.error('Error refreshing map data:', error);
+        console.error('Error in initial data load:', error);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     };
+<<<<<<< HEAD
 
     const intervalId = setInterval(loadMapData, 60000); // Increased to 60 seconds to reduce load
     
@@ -372,28 +412,121 @@ const UserLocationMap = () => {
     } else {
       console.warn('liveUsers is not valid array:', liveUsers);
       setUsersWithLocation([]);
+=======
+    
+    loadInitialData();
+    
+    // Step 2: Setup regular polling with reduced frequency (1 minute)
+    const intervalId = setInterval(() => {
+      if (!isLoading) {
+        console.log('Periodic refresh at', new Date().toLocaleTimeString());
+        fetchLiveUsers().catch(err => console.error('Failed to fetch users:', err));
+        fetchLivePaths().catch(err => console.error('Failed to fetch paths:', err));
+        setLastUpdated(new Date());
+      }
+    }, 60000); // Poll every minute
+    
+    return () => clearInterval(intervalId);
+  }, [user, fetchLiveUsers, fetchLivePaths]);
+
+  // Process user data with improved error handling
+  useEffect(() => {
+    if (!liveUsers || !Array.isArray(liveUsers)) {
+      console.warn('Invalid users data:', liveUsers);
+      setUsersWithLocation([]);
+      return;
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
     }
+    
+    console.log(`Processing ${liveUsers.length} users`);
+    
+    // More robust validation to ensure coordinates are valid
+    const filtered = liveUsers.filter(u => {
+      if (!u) return false;
+      
+      // Convert to numbers and validate
+      const lat = typeof u.latitude === 'string' ? parseFloat(u.latitude) : u.latitude;
+      const lng = typeof u.longitude === 'string' ? parseFloat(u.longitude) : u.longitude;
+      
+      const isValid = 
+        u.id && 
+        u.username && 
+        lat !== undefined &&
+        lng !== undefined &&
+        !isNaN(lat) && 
+        !isNaN(lng) && 
+        Math.abs(lat) <= 90 && 
+        Math.abs(lng) <= 180;
+      
+      if (!isValid) {
+        console.warn(`Filtered out user with invalid data:`, u);
+      }
+      
+      return isValid;
+    });
+    
+    console.log(`Found ${filtered.length} users with valid location data`);
+    
+    // Update center point if we have valid users
+    if (filtered.length > 0) {
+      // Calculate average position for map center
+      const totalLat = filtered.reduce((sum, u) => {
+        const lat = typeof u.latitude === 'string' ? parseFloat(u.latitude) : u.latitude;
+        return sum + lat;
+      }, 0);
+      
+      const totalLng = filtered.reduce((sum, u) => {
+        const lng = typeof u.longitude === 'string' ? parseFloat(u.longitude) : u.longitude;
+        return sum + lng;
+      }, 0);
+      
+      mapCenter.current = [
+        totalLat / filtered.length,
+        totalLng / filtered.length
+      ];
+      
+      console.log(`Map center set to: [${mapCenter.current[0]}, ${mapCenter.current[1]}]`);
+    }
+    
+    setUsersWithLocation(filtered);
+    
+    // Mark map as ready once we have processed user data
+    setMapReady(true);
   }, [liveUsers]);
 
+<<<<<<< HEAD
   // Effect to process path data
   useEffect(() => {
     if (livePaths) {
+=======
+  // Process path data
+  useEffect(() => {
+    if (livePaths && Array.isArray(livePaths)) {
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       console.log(`Processing ${livePaths.length} paths`);
       const parsed = livePaths.map(path => ({
         ...path,
         parsedRoute: parseRouteData(path.route)
       })).filter(path => {
+<<<<<<< HEAD
         const isValid = path.parsedRoute && path.parsedRoute.length > 0;
         if (!isValid) {
           console.log(`Path ${path.id} has invalid route data`);
         }
+=======
+        const isValid = path && path.parsedRoute && path.parsedRoute.length > 0;
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
         return isValid;
       });
       
       console.log(`Found ${parsed.length} paths with valid route data`);
       setPathsWithCoordinates(parsed);
     } else {
+<<<<<<< HEAD
       console.log('No live paths data available');
+=======
+      console.log('No path data or invalid data:', livePaths);
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       setPathsWithCoordinates([]);
     }
   }, [livePaths]);
@@ -401,7 +534,6 @@ const UserLocationMap = () => {
   const toggleRouteMode = () => {
     setRouteMode(!routeMode);
     if (routeMode) {
-      // If turning off, clear selected source
       setSelectedSource(null);
     }
   };
@@ -427,6 +559,7 @@ const UserLocationMap = () => {
     return date.toLocaleTimeString();
   };
 
+<<<<<<< HEAD
   if (isLoading && usersWithLocation.length === 0 && pathsWithCoordinates.length === 0) {
     return <div className="map-loading">Loading map data...</div>;
   }
@@ -441,12 +574,47 @@ const UserLocationMap = () => {
     // Default to a central location if no users
     centerLat = 37.7749; // San Francisco as a default
     centerLng = -122.4194;
+=======
+  // Calculate center point for map
+  let centerLat = mapCenter.current[0];
+  let centerLng = mapCenter.current[1];
+  
+  if (usersWithLocation.length > 0) {
+    // Calculate the average of all valid user positions
+    centerLat = usersWithLocation.reduce((sum, u) => {
+      const lat = typeof u.latitude === 'string' ? parseFloat(u.latitude) : u.latitude;
+      return sum + lat;
+    }, 0) / usersWithLocation.length;
+    
+    centerLng = usersWithLocation.reduce((sum, u) => {
+      const lng = typeof u.longitude === 'string' ? parseFloat(u.longitude) : u.longitude;
+      return sum + lng;
+    }, 0) / usersWithLocation.length;
+  }
+
+  // Show loading screen if we're still loading initial data
+  if (isLoading && !dataFetched) {
+    return (
+      <div className="map-loading-screen">
+        <FontAwesomeIcon icon={faSpinner} spin />
+        <h3>Loading Map Data...</h3>
+        <p>Please wait while we fetch the latest user locations</p>
+      </div>
+    );
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
   }
 
   return (
     <div className="map-container">
       <div className="map-header">
+<<<<<<< HEAD
         <h3>Live User Map</h3>
+=======
+        <div className="map-title">
+          <h3>Live User Map</h3>
+          <MapUserInfo user={user} />
+        </div>
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
         <div className="map-controls">
           <div className="notification-controls">
             <NotificationButton 
@@ -459,6 +627,7 @@ const UserLocationMap = () => {
               className="refresh-button"
               onClick={handleRefresh}
               title="Refresh map data"
+<<<<<<< HEAD
             >
               <FontAwesomeIcon icon={faSync} />
             </button>
@@ -470,6 +639,11 @@ const UserLocationMap = () => {
               title={showTestMarkers ? "Hide test markers" : "Show test markers"}
             >
               {showTestMarkers ? "Hide Tests" : "Show Tests"}
+=======
+              disabled={isLoading}
+            >
+              <FontAwesomeIcon icon={isLoading ? faSpinner : faSync} spin={isLoading} />
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
             </button>
             
             {/* Filter button */}
@@ -503,6 +677,7 @@ const UserLocationMap = () => {
         </div>
       </div>
       
+<<<<<<< HEAD
       {/* Debug panel to show raw user data */}
       {isLoading ? (
         <div className="debug-banner">Loading map data...</div>
@@ -511,6 +686,18 @@ const UserLocationMap = () => {
           No users with location. Raw data: {debugContent}
         </div>
       ) : null}
+=======
+      {/* User count info */}
+      <div className="user-count-info">
+        {usersWithLocation.length === 0 ? (
+          <div className="no-users-warning">No users with location data are currently available</div>
+        ) : (
+          <div className="user-count">
+            Showing {usersWithLocation.length} active users on the map
+          </div>
+        )}
+      </div>
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       
       {/* Show notifications panel when toggled */}
       {showNotifications && (
@@ -528,6 +715,7 @@ const UserLocationMap = () => {
         </div>
       )}
       
+<<<<<<< HEAD
       <MapContainer 
         center={[centerLat || 37.7749, centerLng || -122.4194]} 
         zoom={4} 
@@ -653,13 +841,130 @@ const UserLocationMap = () => {
             </Popup>
           </Polyline>
         ))}
+=======
+      {/* Render the map only if we have data and are ready */}
+      {mapReady && (
+        <MapContainer 
+          center={[centerLat, centerLng]} 
+          zoom={4} 
+          style={{ height: '600px', width: '100%' }}
+          ref={mapRef}
+          whenCreated={(map) => {
+            console.log("Map created with center:", [centerLat, centerLng]);
+            // Force an update after map is created
+            setTimeout(() => {
+              map.invalidateSize();
+            }, 100);
+          }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          
+          {/* Map click handler for route creation */}
+          <MapClickHandler 
+            routeMode={routeMode} 
+            selectedSource={selectedSource} 
+            setSelectedSource={setSelectedSource} 
+            createPath={handleCreatePath}
+          />
+          
+          {/* Display user markers */}
+          {usersWithLocation.map(u => {
+            // Convert latitude and longitude to numbers if they're strings
+            const lat = typeof u.latitude === 'string' ? parseFloat(u.latitude) : u.latitude;
+            const lng = typeof u.longitude === 'string' ? parseFloat(u.longitude) : u.longitude;
+            
+            // Create different icon based on if it's current user or not
+            const markerIcon = u.id === user?.id ? 
+              createCustomIcon('#4285F4') : createCustomIcon('#FF5722');
+            
+            return (
+              <Marker 
+                key={`user-${u.id}`} 
+                position={[lat, lng]}
+                icon={markerIcon}
+              >
+                <Popup>
+                  <div className="user-popup">
+                    <h3>{u.username}</h3>
+                    <div className="user-status">
+                      <span className="status-dot"></span>
+                      Online
+                    </div>
+                    <div className="user-location">
+                      Coordinates: {lat.toFixed(4)}, {lng.toFixed(4)}
+                    </div>
+                    <div className="user-last-active">
+                      Last active: {formatTime(u.last_active)}
+                    </div>
+                    {u.id === user?.id ? (
+                      <div className="current-user-tag">This is you</div>
+                    ) : (
+                      <div className="chat-button-container">
+                        <button 
+                          className="chat-request-button"
+                          onClick={() => handleChatRequest(u.id)}
+                        >
+                          Chat with {u.username}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
 
-        {/* Map bounds updater component */}
-        <MapBoundsUpdater 
-          users={usersWithLocation} 
-          paths={pathsWithCoordinates} 
-        />
-      </MapContainer>
+          {/* Display route source marker if in route mode */}
+          {routeMode && selectedSource && (
+            <Marker 
+              position={[selectedSource.lat, selectedSource.lng]}
+              icon={createCustomIcon('#00C853')}
+            >
+              <Popup>Starting point</Popup>
+            </Marker>
+          )}
+          
+          {/* Display paths as polylines */}
+          {pathsWithCoordinates.map((path, idx) => (
+            <Polyline 
+              key={`path-${path.id || idx}`} 
+              positions={path.parsedRoute} 
+              // Use a special color for intersecting paths
+              color={path.user_id === user?.id ? '#2196F3' : (path.intersects_with_user ? '#4CAF50' : '#FF5722')} 
+              weight={4}
+              opacity={0.7}
+            >
+              <Popup>
+                <div className="path-popup">
+                  <h4>Route Information</h4>
+                  <p><strong>User:</strong> {path.username || 'Unknown'}</p>
+                  <p><strong>Created:</strong> {formatTime(path.created_at)}</p>
+                  {path.intersects_with_user && (
+                    <p className="intersecting-path-notice">This path intersects with your route!</p>
+                  )}
+                  {path.parsedRoute.length > 0 && (
+                    <>
+                      <p><strong>From:</strong> {path.parsedRoute[0][0].toFixed(4)}, {path.parsedRoute[0][1].toFixed(4)}</p>
+                      <p><strong>To:</strong> {path.parsedRoute[path.parsedRoute.length-1][0].toFixed(4)}, {path.parsedRoute[path.parsedRoute.length-1][1].toFixed(4)}</p>
+                      <p><strong>Points:</strong> {path.parsedRoute.length}</p>
+                    </>
+                  )}
+                </div>
+              </Popup>
+            </Polyline>
+          ))}
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
+
+          {/* Map bounds updater component */}
+          <MapBoundsUpdater 
+            users={usersWithLocation} 
+            paths={pathsWithCoordinates} 
+          />
+        </MapContainer>
+      )}
       
       <div className="map-legend">
         <h4>Map Legend</h4>
@@ -676,7 +981,10 @@ const UserLocationMap = () => {
             <div className="legend-line" style={{ backgroundColor: '#2196F3' }}></div>
             <span>Your path</span>
           </div>
+<<<<<<< HEAD
           {/* New legend item for intersecting paths */}
+=======
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
           <div className="legend-item">
             <div className="legend-line" style={{ backgroundColor: '#4CAF50' }}></div>
             <span>Intersecting paths</span>

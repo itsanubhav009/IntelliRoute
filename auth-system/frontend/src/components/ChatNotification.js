@@ -17,7 +17,13 @@ const ChatNotification = ({ notification }) => {
       await acceptChatRequest(notification.chat_room_id);
       
       // Explicitly open the chat after accepting
+<<<<<<< HEAD
       await openChat(notification.chat_room_id);
+=======
+      setTimeout(() => {
+        openChat(notification.chat_room_id);
+      }, 1000);
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
     } catch (error) {
       console.error('Failed to accept chat request', error);
       setError('Could not accept chat request. Please try again.');

@@ -1,13 +1,13 @@
 .notifications-panel {
   position: absolute;
-  top: 50px;
-  right: 5px;
+  top: 60px;
+  right: 20px;
   width: 320px;
   max-height: 400px;
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  z-index: 1001; /* Ensure it appears above other elements */
+  z-index: 1001;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -29,6 +29,36 @@
   color: #333;
 }
 
+.notification-actions {
+  display: flex;
+  align-items: center;
+}
+
+.refresh-notifications-btn {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-right: 10px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+}
+
+.refresh-notifications-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.refresh-notifications-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .close-button {
   background: none;
   border: none;
@@ -37,11 +67,17 @@
   cursor: pointer;
 }
 
+.last-refreshed {
+  padding: 5px 15px;
+  font-size: 0.8rem;
+  color: #777;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #eee;
+}
+
 .notifications-list {
   overflow-y: auto;
-  max-height: 350px;
-  min-height: 150px;
-  padding: 0;
+  max-height: 320px;
 }
 
 .loading-notifications, .no-notifications {

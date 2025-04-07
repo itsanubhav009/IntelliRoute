@@ -14,7 +14,11 @@ export const LocationProvider = ({ children }) => {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [showIntersectingOnly, setShowIntersectingOnly] = useState(false);
   
+<<<<<<< HEAD
   // Ref to prevent concurrent requests and track timestamps
+=======
+  // Add this fetchTimers ref to solve the undefined error
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
   const fetchTimers = useRef({
     users: 0,
     paths: 0
@@ -77,11 +81,16 @@ export const LocationProvider = ({ children }) => {
     setShowIntersectingOnly(newValue);
     
     // Refresh paths with the new filter setting
+<<<<<<< HEAD
     fetchLivePaths(true, newValue); // Force refresh with new filter
+=======
+    fetchLivePaths(newValue);
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
     
     return newValue;
   };
 
+<<<<<<< HEAD
   // Fetch paths data with aggressive throttling
   const fetchLivePaths = async (force = false, intersectOnly = showIntersectingOnly) => {
     // If a request is already in progress, skip this one
@@ -100,11 +109,25 @@ export const LocationProvider = ({ children }) => {
     try {
       requestInProgress.current.paths = true;
       setIsLoading(true);
+=======
+  // Fetch paths data for online users, with optional intersection filtering
+  const fetchLivePaths = async (intersectOnly = showIntersectingOnly) => {
+    setIsLoading(true);
+    try {
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       console.log(`Fetching paths with intersection filter: ${intersectOnly}`);
       
       const response = await api.get(`/path/live?intersectOnly=${intersectOnly}`);
       
       console.log(`Fetched ${response.data.data?.length || 0} paths`);
+<<<<<<< HEAD
+=======
+      if (intersectOnly) {
+        console.log('Intersection filter active, showing only paths that cross your route');
+      }
+      
+      const now = Date.now();
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       fetchTimers.current.paths = now;
       setLivePaths(response.data.data || []);
       setLastUpdated(new Date());
@@ -135,6 +158,7 @@ export const LocationProvider = ({ children }) => {
     }
     
     try {
+<<<<<<< HEAD
       requestInProgress.current.users = true;
       setIsLoading(true);
       console.log('Fetching live users...');
@@ -163,6 +187,14 @@ export const LocationProvider = ({ children }) => {
       setLiveUsers(validUsers);
       setLastUpdated(new Date());
       return validUsers;
+=======
+      const response = await api.get('/location/live');
+      fetchTimers.current.users = now;
+      setLiveUsers(response.data.data || []);
+      setLastUpdated(new Date());
+      console.log(`Fetched ${response.data.data?.length || 0} online users`);
+      return response.data.data;
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
     } catch (error) {
       console.error('Error fetching users:', error);
       setError('Failed to fetch users');
@@ -233,6 +265,7 @@ export const LocationProvider = ({ children }) => {
       // Get current location first
       getCurrentPosition();
       
+<<<<<<< HEAD
       // Do initial data load
       const initialLoad = async () => {
         try {
@@ -250,10 +283,54 @@ export const LocationProvider = ({ children }) => {
         fetchLiveUsers().catch(err => console.error('Failed to fetch users:', err));
         fetchLivePaths().catch(err => console.error('Failed to fetch paths:', err));
       }, 120000); // Increased to 120 seconds (2 minutes) instead of 30 seconds
+=======
+      // Set up polling with the reduced 30-second interval
+      const intervalId = setInterval(() => {
+        fetchLiveUsers().catch(err => console.error('Failed to fetch users:', err));
+        fetchLivePaths().catch(err => console.error('Failed to fetch paths:', err));
+      }, 30000); // Use 30 seconds to reduce refreshing frequency
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       
       return () => clearInterval(intervalId);
     }
   }, [user]);
+
+
+  const forceRefreshData = async () => {
+    console.log("Force refreshing location data...");
+    setIsLoading(true);
+    try {
+      // Clear the timers to bypass throttling
+      fetchTimers.current = {
+        users: 0,
+        paths: 0
+      };
+      
+      // First get users
+      const usersResponse = await api.get('/location/live');
+      const userData = usersResponse.data.data || [];
+      console.log("Users data:", userData);
+      
+      // Then get paths
+      const pathsResponse = await api.get(`/path/live?intersectOnly=${showIntersectingOnly}`);
+      const pathsData = pathsResponse.data.data || [];
+      console.log("Paths data:", pathsData);
+      
+      // Update states
+      setLiveUsers(userData);
+      setLivePaths(pathsData);
+      setLastUpdated(new Date());
+      
+      // Return data for any additional processing
+      return { users: userData, paths: pathsData };
+    } catch (error) {
+      console.error("Error in force refresh:", error);
+      setError("Failed to refresh location data: " + error.message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <LocationContext.Provider
@@ -271,7 +348,11 @@ export const LocationProvider = ({ children }) => {
         fetchLivePaths,
         toggleIntersectionFilter,
         getCurrentPosition,
+<<<<<<< HEAD
         forceRefreshData
+=======
+        forceRefreshData  // Add this new function
+>>>>>>> 7a91c322b9efb3c191dd30b4b6137b1059af62bd
       }}
     >
       {children}
