@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import { AuthContext } from './AuthContext';
 
@@ -12,250 +12,205 @@ export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [pollingInterval, setPollingInterval] = useState(null);
-
-  // Start polling when user is authenticated
-  useEffect(() => {
-    if (user && !pollingInterval) {
-      // Initial load
-      fetchNotifications();
-      fetchActiveChats();
-      
-      // Set up polling every 10 seconds
-      const interval = setInterval(() => {
-        fetchNotifications();
-        if (currentChat) {
-          fetchMessages(currentChat.id);
-        }
-      }, 10000);
-      
-      setPollingInterval(interval);
-      
-      return () => {
-        clearInterval(interval);
-        setPollingInterval(null);
-      };
-    }
-  }, [user, currentChat]);
-
-
-  // Add this to your useEffect in ChatContext.js where you set up polling
-
-useEffect(() => {
-  if (user && !pollingInterval) {
-    // Initial load
-    fetchNotifications();
-    fetchActiveChats();
-    
-    // Set up polling every 10 seconds
-    const interval = setInterval(() => {
-      // Fetch notifications and check for chat_accepted types
-      fetchNotifications().then(notifications => {
-        if (notifications && notifications.length > 0) {
-          // Look for any chat_accepted notifications to auto-open chat
-          const acceptedChat = notifications.find(n => n.type === 'chat_accepted');
-          if (acceptedChat) {
-            console.log('Found chat_accepted notification, opening chat:', acceptedChat.chat_room_id);
-            openChat(acceptedChat.chat_room_id);
-            
-            // Mark this notification as read since we've acted on it
-            markNotificationRead(acceptedChat.id);
-          }
-        }
-      });
-      
-      if (currentChat) {
-        fetchMessages(currentChat.id);
-      }
-    }, 5000); // Reduced to 5 seconds for better responsiveness
-    
-    setPollingInterval(interval);
-    
-    return () => {
-      clearInterval(interval);
-      setPollingInterval(null);
-    };
-  }
-}, [user, currentChat]);
-
-// Add this new function to mark notifications as read
-const markNotificationRead = async (notificationId) => {
-  if (!user || !notificationId) return;
   
-  try {
-    await api.post('/chat/markNotificationRead', { notificationId });
-    // Refresh notifications after marking one as read
-    fetchNotifications();
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
-  }
-};
+  // Track last API call times and pending status
+  const lastApiCall = useRef({
+    notifications: 0,
+    chats: 0,
+    messages: 0
+  });
+  
+  // Track if requests are in progress to prevent duplicates
+  const pendingRequests = useRef({
+    notifications: false,
+    chats: false,
+    messages: false
+  });
 
-  // Fetch active chats for the current user
-  const fetchActiveChats = async () => {
-    if (!user) return;
+  // Helper to enforce minimum delay between API calls
+  const enforceApiDelay = async (key, minDelay = 5000) => {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCall.current[key];
+    
+    // If a request is already pending, don't make another one
+    if (pendingRequests.current[key]) {
+      console.log(`API call to ${key} already in progress, skipping`);
+      return false;
+    }
+    
+    // If we've made a call too recently, wait until we can make another
+    if (timeSinceLastCall < minDelay) {
+      const waitTime = minDelay - timeSinceLastCall;
+      console.log(`Throttling ${key} API call - waiting ${waitTime}ms`);
+      
+      return new Promise(resolve => {
+        setTimeout(() => {
+          lastApiCall.current[key] = Date.now();
+          pendingRequests.current[key] = true;
+          resolve(true);
+        }, waitTime);
+      });
+    }
+    
+    // Otherwise, proceed with the API call
+    lastApiCall.current[key] = now;
+    pendingRequests.current[key] = true;
+    return true;
+  };
+
+  // Delayed fetch notifications
+  const fetchNotifications = useCallback(async (force = false) => {
+    if (!user) return [];
+    
+    // If forced, bypass delay check
+    if (!force && !(await enforceApiDelay('notifications'))) {
+      return notifications; // Return cached data
+    }
+    
+    try {
+      console.log(`[${new Date().toISOString()}] Fetching notifications for ${user.username || 'user'}...`);
+      const response = await api.get('/chat/notifications');
+      
+      // Only update state if the notifications have changed
+      if (JSON.stringify(response.data.notifications) !== JSON.stringify(notifications)) {
+        setNotifications(response.data.notifications || []);
+      }
+      
+      return response.data.notifications || [];
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      return [];
+    } finally {
+      // Mark request as completed
+      pendingRequests.current.notifications = false;
+    }
+  }, [user, notifications]);
+
+  // Delayed fetch active chats
+  const fetchActiveChats = useCallback(async (force = false) => {
+    if (!user) return [];
+    
+    // If forced, bypass delay check
+    if (!force && !(await enforceApiDelay('chats'))) {
+      return activeChats; // Return cached data
+    }
     
     try {
       setLoading(true);
+      console.log(`[${new Date().toISOString()}] Fetching active chats for ${user.username || 'user'}...`);
       const response = await api.get('/chat/active');
-      setActiveChats(response.data.chats || []);
-      return response.data.chats;
+      
+      // Only update state if the chats have changed
+      if (JSON.stringify(response.data.chats) !== JSON.stringify(activeChats)) {
+        setActiveChats(response.data.chats || []);
+      }
+      
+      return response.data.chats || [];
     } catch (error) {
       console.error('Error fetching active chats:', error);
       setError('Failed to fetch active chats');
+      return [];
+    } finally {
+      setLoading(false);
+      pendingRequests.current.chats = false;
+    }
+  }, [user, activeChats]);
+
+  // Send a chat request to another user
+  const sendChatRequest = async (recipientId) => {
+    if (!user || !recipientId) return;
+    
+    try {
+      setLoading(true);
+      console.log(`[${new Date().toISOString()}] Sending chat request to: ${recipientId}...`);
+      
+      // Add artificial delay of 1 second
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const response = await api.post('/chat/request', { recipientId });
+      
+      // Force refresh active chats (bypass throttling)
+      await fetchActiveChats(true);
+      
+      // Store the chat request ID for monitoring
+      localStorage.setItem('pendingChatRequest', response.data.chatRoomId);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error sending chat request:', error);
+      setError('Failed to send chat request: ' + (error.response?.data?.message || error.message));
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch chat notifications
-  const fetchNotifications = async () => {
-    if (!user) return;
+  // Accept a chat request with improved error handling
+  const acceptChatRequest = async (chatRoomId) => {
+    if (!user || !chatRoomId) return;
     
     try {
-      const response = await api.get('/chat/notifications');
-      setNotifications(response.data.notifications || []);
-      return response.data.notifications;
+      setLoading(true);
+      console.log(`[${new Date().toISOString()}] Accepting chat request: ${chatRoomId}...`);
+      
+      // Add artificial delay of 1 second
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const response = await api.post('/chat/accept', { chatRoomId });
+      console.log('Accept response:', response.data);
+      
+      // Force refresh notifications and active chats (bypass throttling)
+      await fetchNotifications(true);
+      const updatedChats = await fetchActiveChats(true);
+      
+      console.log('Looking for chat room in active chats');
+      const acceptedChat = updatedChats.find(c => c.id === chatRoomId);
+      
+      if (acceptedChat) {
+        console.log('Found accepted chat:', acceptedChat);
+        setCurrentChat(acceptedChat);
+        
+        // Fetch messages for this chat (bypass throttling)
+        await fetchMessages(chatRoomId, true);
+      } else {
+        console.error('Accepted chat not found in active chats. Will retry...');
+        // Retry after a delay
+        setTimeout(async () => {
+          const retryChats = await fetchActiveChats(true);
+          const retryChat = retryChats.find(c => c.id === chatRoomId);
+          if (retryChat) {
+            console.log('Found chat on retry');
+            setCurrentChat(retryChat);
+            await fetchMessages(chatRoomId, true);
+          }
+        }, 2000);
+      }
+      
+      return response.data;
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error('Error accepting chat request:', error);
+      setError('Failed to accept chat request: ' + (error.message || 'Unknown error'));
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Send a chat request to another user
-  // Replace your existing sendChatRequest function
-
-const sendChatRequest = async (recipientId) => {
-  if (!user || !recipientId) return;
-  
-  try {
-    setLoading(true);
-    console.log('Sending chat request to:', recipientId);
-    const response = await api.post('/chat/request', { recipientId });
-    
-    // Get the chat room ID from the response
-    const { chatRoomId } = response.data;
-    
-    // Add this chat to our active chats list
-    await fetchActiveChats();
-    
-    // Set up chat monitoring for this room
-    monitorChatRoom(chatRoomId);
-    
-    console.log('Chat request sent, chat room created:', chatRoomId);
-    return response.data;
-  } catch (error) {
-    console.error('Error sending chat request:', error);
-    setError('Failed to send chat request: ' + (error.response?.data?.message || error.message));
-    throw error;
-  } finally {
-    setLoading(false);
-  }
-};
-
-// Add this new function to monitor a chat room for activity
-const monitorChatRoom = (chatRoomId) => {
-  console.log('Starting to monitor chat room:', chatRoomId);
-  
-  // Store the chat room ID in session storage to remember it across refreshes
-  try {
-    const pendingChats = JSON.parse(sessionStorage.getItem('pendingChats') || '[]');
-    if (!pendingChats.includes(chatRoomId)) {
-      pendingChats.push(chatRoomId);
-      sessionStorage.setItem('pendingChats', JSON.stringify(pendingChats));
-    }
-  } catch (error) {
-    console.error('Error storing pending chat in session storage:', error);
-  }
-};
-
-// Add this effect to check for pending chats on component mount
-useEffect(() => {
-  if (user) {
-    try {
-      // Check for any pending chats that we might need to check on
-      const pendingChats = JSON.parse(sessionStorage.getItem('pendingChats') || '[]');
-      
-      if (pendingChats.length > 0) {
-        console.log('Found pending chats to check:', pendingChats);
-        
-        // For each pending chat, check if it's now active
-        fetchActiveChats().then(chats => {
-          const activeChatIds = chats.map(chat => chat.id);
-          
-          // Find chats that were pending but are now active (meaning they were accepted)
-          const acceptedChats = pendingChats.filter(id => activeChatIds.includes(id));
-          
-          if (acceptedChats.length > 0) {
-            console.log('Found accepted chats:', acceptedChats);
-            
-            // Open the first accepted chat
-            openChat(acceptedChats[0]);
-            
-            // Remove these from pending
-            const updatedPendingChats = pendingChats.filter(id => !acceptedChats.includes(id));
-            sessionStorage.setItem('pendingChats', JSON.stringify(updatedPendingChats));
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error checking pending chats:', error);
-    }
-  }
-}, [user]);
-
-  // Accept a chat request
- // Replace the existing acceptChatRequest function in ChatContext.js
-
-const acceptChatRequest = async (chatRoomId) => {
-  if (!user || !chatRoomId) return;
-  
-  try {
-    console.log('Starting accept request process for chat room:', chatRoomId);
-    setLoading(true);
-    
-    const response = await api.post('/chat/accept', { chatRoomId });
-    console.log('Chat acceptance API response:', response.data);
-    
-    // Update the notification list
-    await fetchNotifications();
-    
-    // Update active chats
-    const updatedChats = await fetchActiveChats();
-    
-    // Find the accepted chat in the updated active chats
-    const acceptedChat = updatedChats.find(chat => chat.id === chatRoomId);
-    
-    if (acceptedChat) {
-      console.log('Found accepted chat in active chats:', acceptedChat);
-      // Set this as the current chat
-      setCurrentChat(acceptedChat);
-      
-      // Fetch messages for this chat
-      await fetchMessages(chatRoomId);
-    } else {
-      console.warn('Accepted chat not found in active chats list');
-    }
-    
-    return response.data;
-  } catch (error) {
-    console.error('Error accepting chat request:', error);
-    setError('Failed to accept chat request');
-    throw error;
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Decline a chat request
+  // Decline a chat request 
   const declineChatRequest = async (chatRoomId) => {
     if (!user || !chatRoomId) return;
     
     try {
       setLoading(true);
+      console.log(`[${new Date().toISOString()}] Declining chat request: ${chatRoomId}...`);
+      
+      // Add artificial delay of 1 second
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       const response = await api.post('/chat/decline', { chatRoomId });
       
-      // Update the notification list
-      await fetchNotifications();
+      // Force refresh notifications (bypass throttling)
+      await fetchNotifications(true);
       
       return response.data;
     } catch (error) {
@@ -267,79 +222,151 @@ const acceptChatRequest = async (chatRoomId) => {
     }
   };
 
-  // Send a message in a chat
+  // Send a message in a chat with enhanced error handling
   const sendMessage = async (chatRoomId, message) => {
     if (!user || !chatRoomId || !message) return;
     
     try {
+      console.log(`[${new Date().toISOString()}] Sending message to room: ${chatRoomId}...`);
+      
+      // No delay for sending messages to maintain responsiveness
+      
       const response = await api.post('/chat/send', { chatRoomId, message });
       
       // Add the new message to the state
       const newMessage = response.data.chatMessage;
-      setMessages(prev => [...prev, {...newMessage, profiles: { username: user.username }}]);
+      setMessages(prev => [
+        ...prev, 
+        {...newMessage, profiles: { username: user.username }}
+      ]);
       
       return response.data;
     } catch (error) {
       console.error('Error sending message:', error);
-      setError('Failed to send message');
+      setError('Failed to send message: ' + error.message);
       throw error;
     }
   };
 
-  // Fetch messages for a chat
-  const fetchMessages = async (chatRoomId) => {
+  // Fetch messages for a chat with better error handling and throttling
+  const fetchMessages = async (chatRoomId, force = false) => {
     if (!user || !chatRoomId) return;
+    
+    // If we already have an active chat and it's not forced, enforce delay
+    if (currentChat && !force && !(await enforceApiDelay('messages'))) {
+      return messages; // Return cached messages
+    }
     
     try {
       setLoading(true);
+      console.log(`[${new Date().toISOString()}] Fetching messages for room: ${chatRoomId}...`);
       const response = await api.get(`/chat/messages/${chatRoomId}`);
-      setMessages(response.data.messages || []);
-      return response.data.messages;
+      
+      if (response.data && Array.isArray(response.data.messages)) {
+        console.log(`Fetched ${response.data.messages.length} messages`);
+        setMessages(response.data.messages || []);
+        return response.data.messages;
+      } else {
+        console.error('Invalid messages response:', response.data);
+        setMessages([]);
+        return [];
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
-      setError('Failed to fetch messages');
-      throw error;
+      setError('Failed to fetch messages: ' + error.message);
+      setMessages([]);
+      return [];
     } finally {
       setLoading(false);
+      pendingRequests.current.messages = false;
     }
   };
 
-  // Open a chat
-  // Replace the existing openChat function
-
-const openChat = async (chatRoomId) => {
-  try {
-    console.log('Opening chat room:', chatRoomId);
-    
-    // Check if it's already in active chats
-    let chat = activeChats.find(c => c.id === chatRoomId);
-    
-    if (!chat) {
-      // If not found in current state, try to fetch fresh data
-      console.log('Chat not found in current state, fetching fresh data');
-      const updatedChats = await fetchActiveChats();
-      chat = updatedChats.find(c => c.id === chatRoomId);
+  // Open a chat with improved robustness
+  const openChat = async (chatRoomId) => {
+    try {
+      console.log(`[${new Date().toISOString()}] Opening chat: ${chatRoomId}...`);
+      
+      // First check if this chat is in our current active chats
+      let chat = activeChats.find(c => c.id === chatRoomId);
+      
+      // If not found, try fetching fresh data (bypass throttling)
+      if (!chat) {
+        console.log('Chat not found in current state, fetching fresh data');
+        const updatedChats = await fetchActiveChats(true);
+        chat = updatedChats.find(c => c.id === chatRoomId);
+      }
+      
+      if (chat) {
+        console.log('Setting current chat:', chat);
+        setCurrentChat(chat);
+        await fetchMessages(chatRoomId, true); // Bypass throttling for initial open
+      } else {
+        console.error('Chat not found in active chats');
+        setError('Chat not found - it may have been deleted or you no longer have access');
+      }
+    } catch (error) {
+      console.error('Error opening chat:', error);
+      setError('Failed to open chat: ' + error.message);
     }
-    
-    if (chat) {
-      console.log('Setting current chat:', chat);
-      setCurrentChat(chat);
-      await fetchMessages(chatRoomId);
-    } else {
-      console.error('Chat not found in active chats');
-      setError('Chat not found');
-    }
-  } catch (error) {
-    console.error('Error opening chat:', error);
-    setError('Failed to open chat');
-  }
-};
+  };
 
   // Close the current chat
   const closeChat = () => {
     setCurrentChat(null);
     setMessages([]);
   };
+  
+  // Setup efficient polling with longer intervals
+  useEffect(() => {
+    if (user) {
+      console.log(`[${new Date().toISOString()}] Setting up chat polling for ${user.username || 'itsanubhav009'}...`);
+      
+      // Initial load - force fetch
+      fetchNotifications(true);
+      fetchActiveChats(true);
+      
+      // Check for any pending chat requests we sent
+      const pendingChatId = localStorage.getItem('pendingChatRequest');
+      if (pendingChatId) {
+        console.log('Found pending chat request, checking status:', pendingChatId);
+        fetchActiveChats(true).then(chats => {
+          const pendingChat = chats.find(c => c.id === pendingChatId);
+          if (pendingChat && pendingChat.hasJoined) {
+            console.log('Pending chat has been accepted, opening');
+            openChat(pendingChatId);
+            localStorage.removeItem('pendingChatRequest');
+          }
+        });
+      }
+      
+      // Set up polling with increased intervals (15 seconds for regular polling)
+      const notificationInterval = 15000; // Check notifications every 15 seconds
+      const chatInterval = 20000;         // Check chats every 20 seconds
+      const messageInterval = currentChat ? 10000 : 30000; // Check messages more frequently if chat is open
+      
+      // Separate timers for each type of poll to allow independent timing
+      const notificationTimer = setInterval(() => {
+        fetchNotifications();
+      }, notificationInterval);
+      
+      const chatTimer = setInterval(() => {
+        fetchActiveChats();
+      }, chatInterval);
+      
+      const messageTimer = setInterval(() => {
+        if (currentChat) {
+          fetchMessages(currentChat.id);
+        }
+      }, messageInterval);
+      
+      return () => {
+        clearInterval(notificationTimer);
+        clearInterval(chatTimer);
+        clearInterval(messageTimer);
+      };
+    }
+  }, [user, currentChat]);
 
   return (
     <ChatContext.Provider
@@ -365,3 +392,5 @@ const openChat = async (chatRoomId) => {
     </ChatContext.Provider>
   );
 };
+
+export default ChatProvider;

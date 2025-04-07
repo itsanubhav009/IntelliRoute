@@ -1,44 +1,67 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { ChatContext } from '../context/ChatContext';
+import { AuthContext } from '../context/AuthContext';
 import './ChatDialog.css';
 
 const ChatDialog = () => {
+  const { user } = useContext(AuthContext);
   const { 
     currentChat, 
     messages, 
     sendMessage, 
     closeChat, 
-    loading 
+    loading,
+    fetchMessages
   } = useContext(ChatContext);
   
   const [newMessage, setNewMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
-  console.log('ChatDialog rendered. Current chat:', currentChat);
-  console.log('Messages:', messages);
-
-  // Scroll to bottom of messages when new messages come in
   useEffect(() => {
+    // Scroll to bottom on new messages
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
+  // Re-fetch messages periodically while chat is open
+  useEffect(() => {
+    if (currentChat) {
+      // Initial fetch
+      fetchMessages(currentChat.id);
+      
+      // Set up polling for new messages
+      const intervalId = setInterval(() => {
+        fetchMessages(currentChat.id);
+      }, 5000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [currentChat, fetchMessages]);
+
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || sendingMessage) return;
     
     try {
+      setSendingMessage(true);
+      setError(null);
+      
       await sendMessage(currentChat.id, newMessage.trim());
       setNewMessage('');
     } catch (error) {
       console.error('Failed to send message', error);
+      setError('Failed to send message. Please try again.');
+    } finally {
+      setSendingMessage(false);
     }
   };
 
-  // Safety check - should never happen but just in case
+  // Safety check
   if (!currentChat) {
-    console.warn('ChatDialog rendered without a currentChat');
     return null;
   }
 
@@ -55,14 +78,19 @@ const ChatDialog = () => {
   };
 
   return (
-    <div className="chat-dialog-overlay">
+    <div className="chat-dialog-overlay" onClick={(e) => {
+      // Close when clicking outside the dialog
+      if (e.target.className === 'chat-dialog-overlay') {
+        closeChat();
+      }
+    }}>
       <div className="chat-dialog">
         <div className="chat-header">
           <h3>{chatName}</h3>
           <button className="close-button" onClick={closeChat}>×</button>
         </div>
         
-        <div className="chat-messages">
+        <div className="chat-messages" ref={messagesContainerRef}>
           {loading && messages.length === 0 ? (
             <div className="loading-messages">Loading messages...</div>
           ) : messages.length === 0 ? (
@@ -70,7 +98,7 @@ const ChatDialog = () => {
           ) : (
             messages.map(msg => {
               // Determine if this is my message or the other person's
-              const isMyMessage = msg.user_id === currentChat.otherParticipants[0]?.id ? false : true;
+              const isMyMessage = msg.user_id === user.id;
               
               return (
                 <div 
@@ -86,6 +114,8 @@ const ChatDialog = () => {
           <div ref={messagesEndRef} />
         </div>
         
+        {error && <div className="chat-error">{error}</div>}
+        
         <form className="chat-input-form" onSubmit={handleSend}>
           <input
             type="text"
@@ -93,13 +123,14 @@ const ChatDialog = () => {
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
             className="chat-input"
+            disabled={sendingMessage}
           />
           <button 
             type="submit" 
             className="send-button" 
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || sendingMessage}
           >
-            Send
+            {sendingMessage ? 'Sending...' : 'Send'}
           </button>
         </form>
       </div>

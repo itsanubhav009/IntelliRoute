@@ -91,6 +91,14 @@
   opacity: 0.8;
 }
 
+.chat-error {
+  padding: 8px 15px;
+  background-color: #ffebee;
+  color: #d32f2f;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
 .chat-input-form {
   display: flex;
   padding: 15px;

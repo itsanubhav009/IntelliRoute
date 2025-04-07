@@ -24,12 +24,15 @@ const addDelay = (ms = 1000) => {
 };
 
 // POST /api/chat/request - Send a chat request to another user
+// POST /api/chat/request - Send a chat request to another user
 router.post('/request', async (req, res) => {
   try {
-    await addDelay(500); // Shorter delay for better UX
+    // Shorter delay for better UX
     
     const { recipientId } = req.body;
     const senderId = req.user.id;
+    
+    console.log(`[2025-04-06 09:14:36] User ${req.user.username || 'itsanubhav009'} requested chat with user ${recipientId}`);
     
     if (!recipientId) {
       return res.status(400).json({ message: 'Recipient ID is required' });
@@ -53,7 +56,68 @@ router.post('/request', async (req, res) => {
       return res.status(404).json({ message: 'Recipient not found or not online' });
     }
     
-    // Create a new chat room
+    // STEP 1: Find existing chat rooms between these users
+    console.log(`Checking for existing chat rooms between users ${senderId} and ${recipientId}`);
+    
+    // Find chat rooms where both users are participants
+    const { data: senderParticipations, error: senderError } = await databaseClient
+      .from('chat_participants')
+      .select('chat_room_id')
+      .eq('user_id', senderId);
+      
+    if (senderError) {
+      console.error('Error finding sender participations:', senderError);
+      return res.status(500).json({ message: 'Failed to check existing chats' });
+    }
+    
+    // If sender has chat participations, check which ones also have the recipient
+    let existingChatRoomIds = [];
+    
+    if (senderParticipations && senderParticipations.length > 0) {
+      const chatRoomIds = senderParticipations.map(p => p.chat_room_id);
+      
+      const { data: commonChats, error: commonChatsError } = await databaseClient
+        .from('chat_participants')
+        .select('chat_room_id')
+        .eq('user_id', recipientId)
+        .in('chat_room_id', chatRoomIds);
+      
+      if (!commonChatsError && commonChats && commonChats.length > 0) {
+        existingChatRoomIds = commonChats.map(c => c.chat_room_id);
+        console.log(`Found ${existingChatRoomIds.length} existing chat rooms between users`);
+      }
+    }
+    
+    // STEP 2: Delete existing chat rooms between these users
+    if (existingChatRoomIds.length > 0) {
+      console.log(`Deleting ${existingChatRoomIds.length} existing chat rooms: ${existingChatRoomIds.join(', ')}`);
+      
+      // Delete notifications related to these chat rooms
+      const { error: notificationDeleteError } = await databaseClient
+        .from('chat_notifications')
+        .delete()
+        .in('chat_room_id', existingChatRoomIds);
+        
+      if (notificationDeleteError) {
+        console.error('Error deleting existing notifications:', notificationDeleteError);
+        // Continue anyway, this shouldn't block the main functionality
+      }
+      
+      // Delete chat rooms (this should cascade to participants and messages if set up correctly)
+      const { error: chatRoomDeleteError } = await databaseClient
+        .from('chat_rooms')
+        .delete()
+        .in('id', existingChatRoomIds);
+        
+      if (chatRoomDeleteError) {
+        console.error('Error deleting existing chat rooms:', chatRoomDeleteError);
+        return res.status(500).json({ message: 'Failed to clean up existing chats' });
+      }
+      
+      console.log(`Successfully deleted existing chat rooms between users ${senderId} and ${recipientId}`);
+    }
+    
+    // STEP 3: Create a new chat room (original code continues here)
     const { data: chatRoom, error: chatRoomError } = await databaseClient
       .from('chat_rooms')
       .insert([{ is_active: true }])
@@ -101,8 +165,11 @@ router.post('/request', async (req, res) => {
     }
     
     return res.status(200).json({
-      message: 'Chat request sent successfully',
-      chatRoomId: chatRoom.id
+      message: existingChatRoomIds.length > 0 
+        ? 'Chat request sent successfully (previous chats cleared)' 
+        : 'Chat request sent successfully',
+      chatRoomId: chatRoom.id,
+      previousChatsRemoved: existingChatRoomIds.length
     });
   } catch (error) {
     console.error('Error sending chat request:', error);
@@ -113,7 +180,7 @@ router.post('/request', async (req, res) => {
 // POST /api/chat/accept - Accept a chat request
 router.post('/accept', async (req, res) => {
   try {
-    await addDelay(500);
+   
     
     const { chatRoomId } = req.body;
     const userId = req.user.id;
@@ -224,7 +291,7 @@ router.post('/markNotificationRead', async (req, res) => {
 // POST /api/chat/decline - Decline a chat request
 router.post('/decline', async (req, res) => {
   try {
-    await addDelay(500);
+    
     
     const { chatRoomId } = req.body;
     const userId = req.user.id;

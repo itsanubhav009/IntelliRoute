@@ -218,3 +218,47 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Add to your LocationSelector.css */
+
+.update-button.location {
+  background-color: #ff9800;
+}
+
+.update-button.path {
+  background-color: #2196f3;
+}
+
+.update-button.complete {
+  background-color: #4caf50;
+}
+
+.update-button.error {
+  background-color: #f44336;
+}
+
+.current-time, .current-user {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 5px;
+}
+
+.note {
+  font-style: italic;
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 10px;
+}
+
+.debug-info {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-family: monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

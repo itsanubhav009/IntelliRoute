@@ -14,10 +14,16 @@ export const LocationProvider = ({ children }) => {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [showIntersectingOnly, setShowIntersectingOnly] = useState(false);
   
-  // Add these refs to track fetch timing
+  // Ref to prevent concurrent requests and track timestamps
   const fetchTimers = useRef({
     users: 0,
     paths: 0
+  });
+  
+  // Flag to track if requests are in progress
+  const requestInProgress = useRef({
+    users: false,
+    paths: false
   });
 
   // Update the user's location
@@ -49,7 +55,7 @@ export const LocationProvider = ({ children }) => {
       });
       
       // Refresh paths after creating a new one
-      await fetchLivePaths();
+      await fetchLivePaths(true); // Force refresh
       setLastUpdated(new Date());
       
       return response.data;
@@ -71,68 +77,103 @@ export const LocationProvider = ({ children }) => {
     setShowIntersectingOnly(newValue);
     
     // Refresh paths with the new filter setting
-    fetchLivePaths();
+    fetchLivePaths(true, newValue); // Force refresh with new filter
     
     return newValue;
   };
 
-  // Fetch paths data for online users
-  const fetchLivePaths = async () => {
-    // Prevent calling too frequently
+  // Fetch paths data with aggressive throttling
+  const fetchLivePaths = async (force = false, intersectOnly = showIntersectingOnly) => {
+    // If a request is already in progress, skip this one
+    if (requestInProgress.current.paths && !force) {
+      console.log('Path request already in progress, skipping');
+      return livePaths;
+    }
+    
     const now = Date.now();
-    if (now - fetchTimers.current.paths < 20000) {
+    // Only fetch if forced or it's been at least 60 seconds since last check (was 20s)
+    if (!force && now - fetchTimers.current.paths < 60000) {
       console.log(`Skipping fetchLivePaths - too soon (${Math.round((now - fetchTimers.current.paths)/1000)}s)`);
       return livePaths;
     }
-  
-    setIsLoading(true);
+    
     try {
-      console.log(`Fetching live paths at ${new Date().toISOString()}`);
-      const response = await api.get(`/path/live?intersectOnly=${showIntersectingOnly}`);
+      requestInProgress.current.paths = true;
+      setIsLoading(true);
+      console.log(`Fetching paths with intersection filter: ${intersectOnly}`);
       
+      const response = await api.get(`/path/live?intersectOnly=${intersectOnly}`);
+      
+      console.log(`Fetched ${response.data.data?.length || 0} paths`);
       fetchTimers.current.paths = now;
       setLivePaths(response.data.data || []);
       setLastUpdated(new Date());
-      
-      console.log(`Fetched ${response.data.data?.length || 0} paths`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching paths:', error);
       setError('Failed to fetch paths');
+      return livePaths;
     } finally {
       setIsLoading(false);
+      requestInProgress.current.paths = false;
     }
   };
 
-  // Fetch all active users' locations
-  const fetchLiveUsers = async () => {
-    // Prevent calling too frequently
+  // Fetch all active users' locations with aggressive throttling
+  const fetchLiveUsers = async (force = false) => {
+    // If a request is already in progress, skip this one
+    if (requestInProgress.current.users && !force) {
+      console.log('User request already in progress, skipping');
+      return liveUsers;
+    }
+    
     const now = Date.now();
-    if (now - fetchTimers.current.users < 20000) {
+    // Only fetch if forced or it's been at least 60 seconds since last check (was 20s)
+    if (!force && now - fetchTimers.current.users < 60000) {
       console.log(`Skipping fetchLiveUsers - too soon (${Math.round((now - fetchTimers.current.users)/1000)}s)`);
       return liveUsers;
     }
     
-    setIsLoading(true);
     try {
-      console.log(`Fetching live users at ${new Date().toISOString()}`);
+      requestInProgress.current.users = true;
+      setIsLoading(true);
+      console.log('Fetching live users...');
+      
       const response = await api.get('/location/live');
-      
       fetchTimers.current.users = now;
-      setLiveUsers(response.data.data || []);
-      setLastUpdated(new Date());
       
-      console.log(`Fetched ${response.data.data?.length || 0} active users`);
-      return response.data.data;
+      // Process and validate the data before setting state
+      const userData = response.data.data || [];
+      console.log(`Got ${userData.length} users from API`);
+      
+      // Validate coordinates before setting state
+      const validUsers = userData.filter(u => {
+        const lat = parseFloat(u.latitude);
+        const lng = parseFloat(u.longitude);
+        const isValid = !isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+        
+        if (!isValid && u) {
+          console.warn(`Filtered out user with invalid coordinates:`, u.username, u.latitude, u.longitude);
+        }
+        
+        return isValid;
+      });
+      
+      console.log(`${validUsers.length} users have valid coordinates`);
+      setLiveUsers(validUsers);
+      setLastUpdated(new Date());
+      return validUsers;
     } catch (error) {
       console.error('Error fetching users:', error);
       setError('Failed to fetch users');
+      return liveUsers;
     } finally {
       setIsLoading(false);
+      requestInProgress.current.users = false;
     }
   };
   
-  // Get browser geolocation
+  // Get browser geolocation - only do this at startup
   const getCurrentPosition = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -156,16 +197,59 @@ export const LocationProvider = ({ children }) => {
     }
   };
 
-  // Get current location and set up polling when component mounts
+  // Force refresh data function - useful for manual refresh button
+  const forceRefreshData = async () => {
+    console.log("Force refreshing location data...");
+    setIsLoading(true);
+    try {
+      // Bypass throttling
+      fetchTimers.current = {
+        users: 0,
+        paths: 0
+      };
+      
+      // First get users
+      const userData = await fetchLiveUsers(true);
+      console.log("Users refreshed:", userData?.length || 0);
+      
+      // Then get paths
+      const pathsData = await fetchLivePaths(true);
+      console.log("Paths refreshed:", pathsData?.length || 0);
+      
+      setLastUpdated(new Date());
+      return { users: userData, paths: pathsData };
+    } catch (error) {
+      console.error("Error in force refresh:", error);
+      setError("Failed to refresh location data: " + error.message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial setup and much less frequent polling
   useEffect(() => {
     if (user) {
+      // Get current location first
       getCurrentPosition();
       
-      // Set up polling for live data
+      // Do initial data load
+      const initialLoad = async () => {
+        try {
+          await fetchLiveUsers(true);
+          await fetchLivePaths(true);
+        } catch (error) {
+          console.error('Error in initial data load:', error);
+        }
+      };
+      
+      initialLoad();
+      
+      // Set up polling with MUCH LONGER interval (2 minutes instead of 30 seconds)
       const intervalId = setInterval(() => {
         fetchLiveUsers().catch(err => console.error('Failed to fetch users:', err));
         fetchLivePaths().catch(err => console.error('Failed to fetch paths:', err));
-      }, 30000); // Use 30-second interval
+      }, 120000); // Increased to 120 seconds (2 minutes) instead of 30 seconds
       
       return () => clearInterval(intervalId);
     }
@@ -186,7 +270,8 @@ export const LocationProvider = ({ children }) => {
         fetchLiveUsers,
         fetchLivePaths,
         toggleIntersectionFilter,
-        getCurrentPosition
+        getCurrentPosition,
+        forceRefreshData
       }}
     >
       {children}

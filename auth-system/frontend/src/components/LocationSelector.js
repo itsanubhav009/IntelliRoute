@@ -10,6 +10,7 @@ const LocationSelector = () => {
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updateStage, setUpdateStage] = useState('idle'); // Track the current update stage
   const [message, setMessage] = useState(null);
   const [debugInfo, setDebugInfo] = useState('');
 
@@ -58,9 +59,9 @@ const LocationSelector = () => {
     setSearchTerm('');
   };
 
-  // Direct API call to create a path
+  // Updated function to create a path with proper sequencing
   const sendPathToServer = async (source, destination) => {
-    setDebugInfo('Preparing to send path data to server...');
+    setDebugInfo(`[${new Date().toISOString()}] Preparing to send path data to server...`);
     
     try {
       console.log('Sending path data:', {
@@ -84,7 +85,7 @@ const LocationSelector = () => {
       const data = await response.json();
       
       console.log('Path API response:', data);
-      setDebugInfo(`API response received: ${response.status} - ${JSON.stringify(data)}`);
+      setDebugInfo(`[${new Date().toISOString()}] API response received: ${response.status} - ${JSON.stringify(data)}`);
       
       if (!response.ok) {
         throw { response: { data } };
@@ -93,81 +94,89 @@ const LocationSelector = () => {
       return data;
     } catch (error) {
       console.error('Path API error details:', error);
-      setDebugInfo(`Error: ${error.message || 'Unknown error'}`);
+      setDebugInfo(`[${new Date().toISOString()}] Error: ${error.message || 'Unknown error'}`);
       throw error;
     }
   };
-  // Submit function to update both current location and destination path.
-  // This adds to your existing component
-// Inside the handleSubmit function:
 
-const handleSubmit = async () => {
-  if (!selectedSource || !selectedDestination) {
-    setMessage({ type: 'error', text: 'Please select both your current location and destination.' });
-    return;
-  }
-  
-  setIsUpdating(true);
-  setDebugInfo('Starting update process...');
-  
-  try {
-    // Update current location on server
-    setDebugInfo('Updating location...');
-    await updateLocation(selectedSource.latitude, selectedSource.longitude);
-    
-    // Prepare the path data
-    const sourcePoint = {
-      lat: selectedSource.latitude,
-      lng: selectedSource.longitude
-    };
-    
-    const destPoint = {
-      lat: selectedDestination.latitude,
-      lng: selectedDestination.longitude
-    };
-    
-    setDebugInfo('Sending path data to server for route calculation...');
-    
-    // We no longer create the routeWKT here - the server will handle it
-    // Just send source and destination points
-    const response = await sendPathToServer(sourcePoint, destPoint);
-    
-    if (response.routeWKT) {
-      setDebugInfo(`Server calculated route with ${response.routeWKT.split(',').length} points`);
+  // UPDATED: Modified handleSubmit to properly sequence the operations
+  // First set location, wait for completion, then update path
+  const handleSubmit = async () => {
+    if (!selectedSource || !selectedDestination) {
+      setMessage({ type: 'error', text: 'Please select both your current location and destination.' });
+      return;
     }
     
-    setDebugInfo('Update completed successfully');
-    setMessage({ 
-      type: 'success', 
-      text: `Location updated to ${selectedSource.name} and route to ${selectedDestination.name} created.`
-    });
-  } catch (error) {
-    console.error('Failed to update location/path:', error);
+    setIsUpdating(true);
+    setUpdateStage('location');
+    setDebugInfo(`[${new Date().toISOString()}] Starting update process...`);
     
-    // Better error handling
-    let errorMessage = 'Failed to update. Please try again.';
-    
-    if (error.response && error.response.data && error.response.data.message) {
-      errorMessage = error.response.data.message;
+    try {
+      // STEP 1: First update the user's current location
+      setDebugInfo(`[${new Date().toISOString()}] Updating location to ${selectedSource.name}...`);
       
-      // Special handling for inactive user error
-      if (errorMessage.includes('Only active users')) {
-        errorMessage = 'Your location needs to be updated first. Please try again in a moment.';
+      // Update location and wait for it to complete
+      await updateLocation(selectedSource.latitude, selectedSource.longitude);
+      
+      // Add a short delay to ensure the location update is processed on the server
+      setDebugInfo(`[${new Date().toISOString()}] Location updated. Waiting 3 seconds before creating path...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // STEP 2: Now that location is set, update the path
+      setUpdateStage('path');
+      
+      // Prepare the path data
+      const sourcePoint = {
+        lat: selectedSource.latitude,
+        lng: selectedSource.longitude
+      };
+      
+      const destPoint = {
+        lat: selectedDestination.latitude,
+        lng: selectedDestination.longitude
+      };
+      
+      setDebugInfo(`[${new Date().toISOString()}] Location update complete. Sending path data to server...`);
+      
+      // Send path request to the server
+      const response = await sendPathToServer(sourcePoint, destPoint);
+      
+      if (response.routeWKT) {
+        setDebugInfo(`[${new Date().toISOString()}] Server calculated route with ${response.routeWKT.split(',').length} points`);
       }
+      
+      setUpdateStage('complete');
+      setDebugInfo(`[${new Date().toISOString()}] Update completed successfully - ${selectedSource.name} to ${selectedDestination.name}`);
+      setMessage({ 
+        type: 'success', 
+        text: `Location updated to ${selectedSource.name} and route to ${selectedDestination.name} created.`
+      });
+    } catch (error) {
+      console.error('Failed to update location/path:', error);
+      
+      // Better error handling
+      let errorMessage = 'Failed to update. Please try again.';
+      
+      if (error.response && error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message;
+        
+        // Special handling for inactive user error
+        if (errorMessage.includes('Only active users')) {
+          errorMessage = 'Your location needs to be updated first. Please try again in a moment.';
+        }
+      }
+      
+      setDebugInfo(`[${new Date().toISOString()}] Error: ${errorMessage}`);
+      setMessage({ type: 'error', text: errorMessage });
+      setUpdateStage('error');
+    } finally {
+      setIsUpdating(false);
     }
-    
-    setMessage({ type: 'error', text: errorMessage });
-  } finally {
-    setIsUpdating(false);
-  }
-};
-
-// Update sendPathToServer function
-
+  };
 
   // For debugging - directly test API call
   const testApiCall = async () => {
-    setDebugInfo('Testing API call...');
+    setDebugInfo(`[${new Date().toISOString()}] Testing API call...`);
     try {
       // Test basic authentication
       const token = localStorage.getItem('token');
@@ -202,11 +211,35 @@ const handleSubmit = async () => {
     }
   };
 
+  // Get button text based on update stage
+  const getButtonText = () => {
+    if (!isUpdating) return 'Update Location & Set Path';
+    
+    switch (updateStage) {
+      case 'location':
+        return 'Updating Location...';
+      case 'path':
+        return 'Creating Path...';
+      case 'complete':
+        return 'Update Complete!';
+      case 'error':
+        return 'Update Failed';
+      default:
+        return 'Updating...';
+    }
+  };
+
   return (
     <div className="location-selector">
       <div className="location-selector-header">
         <h3>Select Your Location &amp; Destination</h3>
         <p>Choose your current location and a destination for path calculation</p>
+        <div className="current-time">
+          {new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC
+        </div>
+        <div className="current-user">
+          Logged in as: <strong>itsanubhav009</strong>
+        </div>
       </div>
       
       {message && (
@@ -297,17 +330,18 @@ const handleSubmit = async () => {
       
       <div className="location-actions">
         <button 
-          className="update-button"
+          className={`update-button ${updateStage !== 'idle' ? updateStage : ''}`}
           onClick={handleSubmit}
           disabled={!selectedSource || !selectedDestination || isUpdating}
         >
-          {isUpdating ? 'Updating...' : 'Update Location & Set Path'}
+          {getButtonText()}
         </button>
         
         {/* Debug button */}
         <button 
           className="test-api-button"
           onClick={testApiCall}
+          disabled={isUpdating}
         >
           Test API Connection
         </button>
@@ -320,6 +354,7 @@ const handleSubmit = async () => {
             <p>From: {selectedSource.name}</p>
             <p>To: {selectedDestination.name}</p>
             <p className="hint">Click "Update Location & Set Path" to create a route between these points</p>
+            <p className="note">Note: Location will be updated first, then path will be created after a short delay</p>
           </div>
         )}
       </div>
