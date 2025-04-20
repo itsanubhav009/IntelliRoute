@@ -1,139 +1,228 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { ChatContext } from '../context/ChatContext';
-import { AuthContext } from '../context/AuthContext';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTimes, faPaperPlane, faSpinner, faInfoCircle, faCheck } from '@fortawesome/free-solid-svg-icons';
 import './ChatDialog.css';
 
 const ChatDialog = () => {
-  const { user } = useContext(AuthContext);
   const { 
     currentChat, 
     messages, 
     sendMessage, 
     closeChat, 
-    loading,
-    fetchMessages
+    fetchMessages,
+    chatStatus,
+    fetchActiveChats
   } = useContext(ChatContext);
   
-  const [newMessage, setNewMessage] = useState('');
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [error, setError] = useState(null);
+  const [messageText, setMessageText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
+  const [localChatState, setLocalChatState] = useState({
+    isActive: false,
+    hasJoined: false,
+    isReady: false
+  });
   const messagesEndRef = useRef(null);
-  const messagesContainerRef = useRef(null);
-
+  
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  // Effect to scroll to bottom when messages change
   useEffect(() => {
-    // Scroll to bottom on new messages
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    scrollToBottom();
   }, [messages]);
-
-  // Re-fetch messages periodically while chat is open
+  
+  // Effect to check and update chat status
   useEffect(() => {
-    if (currentChat) {
-      // Initial fetch
-      fetchMessages(currentChat.id);
-      
-      // Set up polling for new messages
-      const intervalId = setInterval(() => {
-        fetchMessages(currentChat.id);
-      }, 5000);
-      
-      return () => clearInterval(intervalId);
+    if (!currentChat) return;
+    
+    console.log('Current chat state:', currentChat);
+    
+    // Force active if we already have messages (a reliable indicator of an active chat)
+    const forceActive = messages && messages.length > 0;
+    
+    // Update local state based on current chat and message presence
+    setLocalChatState({
+      isActive: forceActive || currentChat.isActive,
+      hasJoined: forceActive || currentChat.hasJoined,
+      isReady: forceActive || (currentChat.isActive && currentChat.hasJoined)
+    });
+    
+    // If chat appears inactive but we have messages, refresh chat status
+    if (!currentChat.isActive && messages && messages.length > 0) {
+      console.log('Chat appears active (has messages) but status shows inactive. Refreshing...');
+      fetchActiveChats(true).then(updatedChats => {
+        const updatedChat = updatedChats.find(c => c.id === currentChat.id);
+        if (updatedChat) {
+          console.log('Updated chat status:', updatedChat);
+          if (updatedChat.isActive) {
+            setLocalChatState({
+              isActive: true,
+              hasJoined: true,
+              isReady: true
+            });
+          }
+        }
+      });
     }
-  }, [currentChat, fetchMessages]);
-
-  const handleSend = async (e) => {
+    
+    // Set up polling to check status if needed
+    let checkInterval;
+    
+    if (!currentChat.isActive || !currentChat.hasJoined) {
+      console.log('Setting up status polling for chat room', currentChat.id);
+      
+      checkInterval = setInterval(() => {
+        fetchActiveChats(true).then(updatedChats => {
+          const updatedChat = updatedChats.find(c => c.id === currentChat.id);
+          if (updatedChat && (updatedChat.isActive || messages.length > 0)) {
+            console.log('Updated chat status:', updatedChat);
+            setLocalChatState({
+              isActive: true,
+              hasJoined: true, 
+              isReady: true
+            });
+            clearInterval(checkInterval);
+          }
+        });
+      }, 3000);
+    }
+    
+    // Regular message polling
+    const messagePollingId = setInterval(() => {
+      fetchMessages(currentChat.id);
+    }, 5000);
+    
+    return () => {
+      if (checkInterval) clearInterval(checkInterval);
+      clearInterval(messagePollingId);
+    };
+  }, [currentChat, messages, fetchActiveChats, fetchMessages]);
+  
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || sendingMessage) return;
+    
+    if (!messageText.trim() || !currentChat) return;
     
     try {
-      setSendingMessage(true);
-      setError(null);
+      setSending(true);
+      setSendError(null);
+      await sendMessage(currentChat.id, messageText);
+      setMessageText('');
       
-      await sendMessage(currentChat.id, newMessage.trim());
-      setNewMessage('');
+      // If we successfully sent a message, the chat must be active
+      setLocalChatState({
+        isActive: true,
+        hasJoined: true,
+        isReady: true
+      });
     } catch (error) {
-      console.error('Failed to send message', error);
-      setError('Failed to send message. Please try again.');
+      console.error('Failed to send message:', error);
+      setSendError('Failed to send message: ' + (error.response?.data?.message || error.message));
+      
+      // Clear error after 5 seconds
+      setTimeout(() => setSendError(null), 5000);
     } finally {
-      setSendingMessage(false);
+      setSending(false);
     }
   };
-
-  // Safety check
-  if (!currentChat) {
-    return null;
-  }
-
-  // Get the name of the other participant
-  const otherParticipant = currentChat.otherParticipants && 
-                          currentChat.otherParticipants.length > 0 ? 
-                          currentChat.otherParticipants[0] : null;
-  const chatName = otherParticipant ? otherParticipant.username : 'Chat';
-
-  // Format time
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
+  
+  if (!currentChat) return null;
+  
+  const otherUser = currentChat.otherParticipants && currentChat.otherParticipants[0];
+  // Use the local state which may override the current chat state
+  const isActive = localChatState.isActive || (messages && messages.length > 0);
+  const isReady = localChatState.isReady || (messages && messages.length > 0);
+  
   return (
-    <div className="chat-dialog-overlay" onClick={(e) => {
-      // Close when clicking outside the dialog
-      if (e.target.className === 'chat-dialog-overlay') {
-        closeChat();
-      }
-    }}>
-      <div className="chat-dialog">
-        <div className="chat-header">
-          <h3>{chatName}</h3>
-          <button className="close-button" onClick={closeChat}>×</button>
+    <div className="chat-dialog">
+      <div className="chat-header">
+        <div className="chat-title">
+          {otherUser ? otherUser.username : 'Chat'}
+          {!isActive && <span className="chat-status-pill">Pending</span>}
+          {isActive && <span className="chat-status-pill active">Active</span>}
         </div>
-        
-        <div className="chat-messages" ref={messagesContainerRef}>
-          {loading && messages.length === 0 ? (
-            <div className="loading-messages">Loading messages...</div>
-          ) : messages.length === 0 ? (
-            <div className="no-messages">No messages yet. Say hello!</div>
-          ) : (
-            messages.map(msg => {
-              // Determine if this is my message or the other person's
-              const isMyMessage = msg.user_id === user.id;
-              
-              return (
-                <div 
-                  key={msg.id}
-                  className={`message ${isMyMessage ? 'sent' : 'received'}`}
-                >
-                  <div className="message-content">{msg.message}</div>
-                  <div className="message-time">{formatTime(msg.created_at)}</div>
-                </div>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-        
-        {error && <div className="chat-error">{error}</div>}
-        
-        <form className="chat-input-form" onSubmit={handleSend}>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="chat-input"
-            disabled={sendingMessage}
-          />
-          <button 
-            type="submit" 
-            className="send-button" 
-            disabled={!newMessage.trim() || sendingMessage}
-          >
-            {sendingMessage ? 'Sending...' : 'Send'}
-          </button>
-        </form>
+        <button className="close-button" onClick={closeChat}>
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
       </div>
+      
+      {!isReady && (
+        <div className="chat-pending-banner">
+          <FontAwesomeIcon icon={faInfoCircle} />
+          Checking chat status...
+        </div>
+      )}
+      
+      {isReady && messages.length > 0 && (
+        <div className="chat-active-banner">
+          <FontAwesomeIcon icon={faCheck} />
+          Chat is active. You can now send messages.
+        </div>
+      )}
+      
+      <div className="chat-messages">
+        {messages.length > 0 ? (
+          messages.map((msg) => (
+            <div 
+              key={msg.id} 
+              className={`message ${msg.user_id === currentChat.otherParticipants[0]?.id ? 'received' : 'sent'}`}
+            >
+              <div className="message-bubble">
+                {msg.message}
+              </div>
+              <div className="message-info">
+                {msg.profiles?.username || 'User'} · {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="no-messages">
+            {isReady
+              ? "No messages yet. Start the conversation!"
+              : "Waiting for chat to activate. Messages will appear here once both users have joined."}
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      
+      {chatStatus && (
+        <div className={`chat-dialog-status ${chatStatus.type}`}>
+          {chatStatus.message}
+        </div>
+      )}
+      
+      {sendError && (
+        <div className="chat-dialog-status error">
+          {sendError}
+        </div>
+      )}
+      
+      <form className="chat-input" onSubmit={handleSendMessage}>
+        <input
+          type="text"
+          value={messageText}
+          onChange={(e) => setMessageText(e.target.value)}
+          placeholder={isReady 
+            ? "Type your message..." 
+            : "Waiting for chat to activate..."}
+          disabled={sending || !isReady}
+        />
+        <button 
+          type="submit" 
+          disabled={sending || !messageText.trim() || !isReady}
+          className={isReady ? "active" : ""}
+        >
+          {sending ? (
+            <FontAwesomeIcon icon={faSpinner} className="fa-spin" />
+          ) : (
+            <FontAwesomeIcon icon={faPaperPlane} />
+          )}
+        </button>
+      </form>
     </div>
   );
 };

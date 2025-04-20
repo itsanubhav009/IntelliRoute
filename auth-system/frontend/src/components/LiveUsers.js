@@ -4,45 +4,58 @@ import { AuthContext } from '../context/AuthContext';
 import './LiveUsers.css';
 
 const LiveUsers = () => {
-  const { liveUsers, loadingUsers, fetchLiveUsers } = useContext(LocationContext);
-  const { user } = useContext(AuthContext);
+  // Add default empty array and default values to prevent undefined errors
+  const { liveUsers = [], loadingUsers = false, fetchLiveUsers = () => {} } = useContext(LocationContext) || {};
+  const { user } = useContext(AuthContext) || {};
   const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds default
+  const [lastUpdated, setLastUpdated] = useState(new Date());
   
   useEffect(() => {
-    // Initial fetch
-    fetchLiveUsers();
-    
-    // Set up auto-refresh
-    const intervalId = setInterval(() => {
+    // Check if fetchLiveUsers exists before calling
+    if (typeof fetchLiveUsers === 'function') {
+      // Initial fetch
       fetchLiveUsers();
-    }, refreshInterval);
-    
-    // Cleanup
-    return () => clearInterval(intervalId);
-  }, [refreshInterval]);
+      
+      // Set up auto-refresh
+      const intervalId = setInterval(() => {
+        fetchLiveUsers();
+        setLastUpdated(new Date());
+      }, refreshInterval);
+      
+      // Cleanup
+      return () => clearInterval(intervalId);
+    }
+  }, [refreshInterval, fetchLiveUsers]);
 
   const formatLastActive = (timestamp) => {
     if (!timestamp) return 'Unknown';
     
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffSeconds = Math.floor((now - date) / 1000);
-    
-    if (diffSeconds < 60) {
-      return 'Just now';
-    } else if (diffSeconds < 3600) {
-      const minutes = Math.floor(diffSeconds / 60);
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    } else if (diffSeconds < 86400) {
-      const hours = Math.floor(diffSeconds / 3600);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else {
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffSeconds = Math.floor((now - date) / 1000);
+      
+      if (diffSeconds < 60) {
+        return 'Just now';
+      } else if (diffSeconds < 3600) {
+        const minutes = Math.floor(diffSeconds / 60);
+        return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+      } else if (diffSeconds < 86400) {
+        const hours = Math.floor(diffSeconds / 3600);
+        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      } else {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+      }
+    } catch (e) {
+      return 'Invalid date';
     }
   };
 
   const handleRefresh = () => {
-    fetchLiveUsers();
+    if (typeof fetchLiveUsers === 'function') {
+      fetchLiveUsers();
+      setLastUpdated(new Date());
+    }
   };
 
   const changeRefreshInterval = (interval) => {
@@ -52,7 +65,7 @@ const LiveUsers = () => {
   return (
     <div className="live-users-container">
       <div className="live-users-header">
-        <h2>Live Users ({liveUsers.length})</h2>
+        <h2>Live Users ({Array.isArray(liveUsers) ? liveUsers.length : 0})</h2>
         <div className="refresh-control">
           <button 
             onClick={handleRefresh} 
@@ -76,35 +89,35 @@ const LiveUsers = () => {
           </div>
           
           <span className="last-updated">
-            Last updated: {new Date().toLocaleTimeString()}
+            Last updated: {lastUpdated.toLocaleTimeString()}
           </span>
         </div>
       </div>
       
-      {loadingUsers && liveUsers.length === 0 ? (
+      {loadingUsers && (!Array.isArray(liveUsers) || liveUsers.length === 0) ? (
         <div className="live-users-loading">Loading users...</div>
-      ) : liveUsers.length === 0 ? (
+      ) : !Array.isArray(liveUsers) || liveUsers.length === 0 ? (
         <p className="no-users-message">No users are currently online</p>
       ) : (
         <div className="live-users-list">
           {liveUsers.map((userItem) => (
             <div 
-              key={userItem.id} 
-              className={`user-card ${userItem.id === user?.id ? 'current-user' : ''}`}
+              key={userItem?.id || `user-${Math.random()}`} 
+              className={`user-card ${userItem?.id === user?.id ? 'current-user' : ''}`}
             >
               <div 
                 className="user-avatar"
                 style={{ 
-                  backgroundColor: userItem.id === user?.id ? '#4285F4' : '#FF5722'
+                  backgroundColor: userItem?.id === user?.id ? '#4285F4' : '#FF5722'
                 }}
               >
-                {userItem.username.charAt(0).toUpperCase()}
+                {(userItem?.username || 'U').charAt(0).toUpperCase()}
               </div>
               <div className="user-info">
                 <div className="user-name-status">
                   <span className="username">
-                    {userItem.username}
-                    {userItem.id === user?.id && (
+                    {userItem?.username || 'Unknown User'}
+                    {userItem?.id === user?.id && (
                       <span className="self-indicator"> (You)</span>
                     )}
                   </span>
@@ -116,13 +129,13 @@ const LiveUsers = () => {
                 
                 <div className="user-details">
                   <span className="last-active">
-                    Last active: {formatLastActive(userItem.last_active)}
+                    Last active: {formatLastActive(userItem?.last_active)}
                   </span>
                   
-                  {userItem.latitude && userItem.longitude ? (
+                  {userItem?.latitude && userItem?.longitude ? (
                     <div className="location-info">
                       <span className="coordinates">
-                        {userItem.latitude.toFixed(4)}, {userItem.longitude.toFixed(4)}
+                        {parseFloat(userItem.latitude).toFixed(4)}, {parseFloat(userItem.longitude).toFixed(4)}
                       </span>
                       <a 
                         href={`https://www.google.com/maps?q=${userItem.latitude},${userItem.longitude}`}

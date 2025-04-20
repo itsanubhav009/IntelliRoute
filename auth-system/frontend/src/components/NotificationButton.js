@@ -1,27 +1,22 @@
 import React from 'react';
 import './NotificationButton.css';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBell } from '@fortawesome/free-solid-svg-icons';
 
-const NotificationButton = ({ notificationCount, onClick }) => {
-  const handleClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log("Notification button clicked");
-    if (onClick) onClick();
-  };
-
+const NotificationButton = ({ notificationCount, onClick, isLoading }) => {
   return (
     <button 
-      className="custom-notification-btn" 
-      onClick={handleClick}
+      className={`notification-btn ${isLoading ? 'loading' : ''}`}
+      onClick={onClick}
       aria-label="Notifications"
+      title="View notifications"
+      disabled={isLoading}
     >
-      <div className="bell-icon">
-        <div className="bell-top"></div>
-        <div className="bell-body"></div>
-      </div>
+      <FontAwesomeIcon icon={faBell} className="bell-icon" />
       {notificationCount > 0 && (
-        <span className="notification-count">{notificationCount}</span>
+        <span className="notification-badge">{notificationCount}</span>
       )}
+      {isLoading && <span className="loading-spinner"></span>}
     </button>
   );
 };

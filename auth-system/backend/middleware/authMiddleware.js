@@ -1,34 +1,41 @@
+// Fix for auth middleware to ensure username is properly populated
 const jwt = require('jsonwebtoken');
-const asyncHandler = require('express-async-handler');
+const User = require('../models/userModel');
 
-// Fix the protect middleware to properly identify users
-const protect = asyncHandler(async (req, res, next) => {
+const protect = async (req, res, next) => {
   let token;
-  
+
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       // Get token from header
       token = req.headers.authorization.split(' ')[1];
-      
+
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Get complete user information including username
+      const user = await User.findById(decoded.id);
       
-      // Add user info to request
-      req.user = decoded;
-      
-      // Debug log with timestamp
-      console.log(`[${new Date().toISOString()}] Request authenticated for user: ${req.user.id}`);
+      if (!user) {
+        console.error(`[2025-04-09 11:25:30] Auth error: User ID ${decoded.id} not found`);
+        return res.status(401).json({ message: 'Not authorized, token invalid' });
+      }
+
+      // Important: Set COMPLETE user info including username
+      req.user = {
+        id: user.id,
+        username: user.username,  // Ensure username is included
+        email: user.email
+      };
+
       next();
     } catch (error) {
-      console.error('Auth token verification failed:', error.message);
-      res.status(401);
-      throw new Error('Not authorized, invalid token');
+      console.error(`[2025-04-09 11:25:30] Auth error:`, error);
+      res.status(401).json({ message: 'Not authorized, token invalid' });
     }
   } else {
-    console.log(`[${new Date().toISOString()}] No auth token in request`);
-    res.status(401);
-    throw new Error('Not authorized, no token');
+    res.status(401).json({ message: 'Not authorized, no token' });
   }
-});
+};
 
 module.exports = { protect };

@@ -10,9 +10,9 @@ try {
   if (!databaseClient || typeof databaseClient.from !== 'function') {
     throw new Error('Supabase client not properly initialized');
   }
-  console.log('Using Supabase database client for paths');
+  console.log('[2025-04-10 11:38:53] Using Supabase database client for paths');
 } catch (error) {
-  console.error('Supabase error in paths, using fallback database:', error.message);
+  console.error('[2025-04-10 11:38:53] Supabase error in paths, using fallback database:', error.message);
   databaseClient = require('./fallbackDb');
 }
 
@@ -21,6 +21,7 @@ router.use(protect);
 
 // Helper function: Artificial delay to slow down requests as requested
 const addDelay = (ms = 2000) => {
+  if (process.env.NODE_ENV === 'production') return Promise.resolve();
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
@@ -53,11 +54,11 @@ const getOSRMRoute = async (source, destination) => {
     // Call the OSRM API
     const osrmURL = `https://router.project-osrm.org/route/v1/driving/${source.lng},${source.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
     
-    console.log(`Fetching route from OSRM: ${osrmURL}`);
+    console.log(`[2025-04-10 11:38:53] Fetching route from OSRM: ${osrmURL}`);
     const data = await makeHttpRequest(osrmURL);
     
     if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
-      console.error('OSRM API error or no routes returned:', data);
+      console.error('[2025-04-10 11:38:53] OSRM API error or no routes returned:', data);
       // Fallback to direct line if routing fails
       return `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
     }
@@ -69,10 +70,10 @@ const getOSRMRoute = async (source, destination) => {
     const points = coordinates.map(point => `${point[0]} ${point[1]}`).join(', ');
     const wkt = `LINESTRING(${points})`;
     
-    console.log(`Generated WKT route with ${coordinates.length} points`);
+    console.log(`[2025-04-10 11:38:53] Generated WKT route with ${coordinates.length} points`);
     return wkt;
   } catch (error) {
-    console.error('Error fetching OSRM route:', error);
+    console.error('[2025-04-10 11:38:53] Error fetching OSRM route:', error);
     // Fallback to direct line if routing fails
     return `LINESTRING(${source.lng} ${source.lat}, ${destination.lng} ${destination.lat})`;
   }
@@ -86,7 +87,7 @@ const updateUserLocationAndStatus = async (userId, source) => {
   
   try {
     const now = new Date().toISOString();
-    console.log(`Updating location for user ${userId} to ${source.lat}, ${source.lng} at ${now}`);
+    console.log(`[2025-04-10 11:38:53] Updating location for user ${userId} to ${source.lat}, ${source.lng} at ${now}`);
     
     const { data, error } = await databaseClient
       .from('profiles')
@@ -99,45 +100,56 @@ const updateUserLocationAndStatus = async (userId, source) => {
       .eq('id', userId);
       
     if (error) {
-      console.error('Error updating user location and status:', error);
+      console.error('[2025-04-10 11:38:53] Error updating user location and status:', error);
     } else {
-      console.log('User location and online status updated successfully');
+      console.log('[2025-04-10 11:38:53] User location and online status updated successfully');
     }
   } catch (error) {
-    console.error('Exception updating user location and status:', error);
+    console.error('[2025-04-10 11:38:53] Exception updating user location and status:', error);
   }
 };
 
 // POST /api/path/set - Stores a path in database for the current user
-// POST /api/path/set - Stores a path in database for the current user
-// POST /api/path/set - Stores a path in database for the current user
 router.post('/set', async (req, res) => {
   try {
     const startTime = new Date();
+    const { isValid, missingFields } = validateUserData(req.user);
+    if (!isValid) {
+      console.error(`[2025-04-10 11:38:53] Missing user data: ${missingFields.join(', ')}`);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Your profile is incomplete. Please log out and log in again.' 
+      });
+    }
+    
     const userId = req.user.id;
+    const username = req.user.username; // Validated above
     const { source, destination } = req.body;
     
-    console.log(`[${startTime.toISOString()}] PATH-SET: Creating path for user ${userId} (${req.user.username || 'Unknown'})`);
-    console.log(`PATH-SET: From ${source.lat},${source.lng} to ${destination.lat},${destination.lng}`);
+    console.log(`[2025-04-10 11:38:53] PATH-SET: Creating path for user ${userId} (${username})`);
+    console.log(`[2025-04-10 11:38:53] PATH-SET: From ${source.lat},${source.lng} to ${destination.lat},${destination.lng}`);
     
     if (!source || !destination) {
-      return res.status(400).json({ message: 'Source and Destination are required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Source and Destination are required' 
+      });
     }
 
     // Update user's location and set them ONLINE
     await updateUserLocationAndStatus(userId, source);
     
     // Get the route from OpenStreetMap
-    console.log(`PATH-SET: Fetching route from OSRM...`);
+    console.log(`[2025-04-10 11:38:53] PATH-SET: Fetching route from OSRM...`);
     const routeWKT = await getOSRMRoute(source, destination);
-    console.log(`PATH-SET: Generated WKT route with ${routeWKT.split(',').length} points`);
+    console.log(`[2025-04-10 11:38:53] PATH-SET: Generated WKT route with ${routeWKT.split(',').length} points`);
 
     let pathId = null;
     
     // Use the appropriate client
     if (typeof databaseClient.from === 'function') {
       // FIRST: Delete all existing paths for this user
-      console.log(`PATH-SET: Deleting existing paths for user ${userId}`);
+      console.log(`[2025-04-10 11:38:53] PATH-SET: Deleting existing paths for user ${userId}`);
       try {
         const { error: deleteError } = await databaseClient
           .from('commute_routes')
@@ -145,17 +157,25 @@ router.post('/set', async (req, res) => {
           .eq('user_id', userId);
         
         if (deleteError) {
-          console.error('PATH-SET ERROR: Failed to delete existing paths:', deleteError);
-          return res.status(500).json({ message: 'Error clearing existing paths', error: deleteError });
+          console.error('[2025-04-10 11:38:53] PATH-SET ERROR: Failed to delete existing paths:', deleteError);
+          return res.status(500).json({ 
+            success: false,
+            message: 'Error clearing existing paths', 
+            error: deleteError 
+          });
         }
-        console.log(`PATH-SET: Successfully deleted existing paths`);
+        console.log(`[2025-04-10 11:38:53] PATH-SET: Successfully deleted existing paths`);
       } catch (deleteError) {
-        console.error(`PATH-SET ERROR: Exception deleting existing paths:`, deleteError);
-        return res.status(500).json({ message: 'Error clearing existing paths', error: deleteError.message });
+        console.error(`[2025-04-10 11:38:53] PATH-SET ERROR: Exception deleting existing paths:`, deleteError);
+        return res.status(500).json({ 
+          success: false,
+          message: 'Error clearing existing paths', 
+          error: deleteError.message 
+        });
       }
       
       // SECOND: Direct insert with detailed error handling
-      console.log(`PATH-SET: Inserting new path...`);
+      console.log(`[2025-04-10 11:38:53] PATH-SET: Inserting new path...`);
       try {
         // Explicitly log what we're inserting
         const newPath = {
@@ -166,7 +186,7 @@ router.post('/set', async (req, res) => {
           dest_lng: destination.lng,
           route_wkt: routeWKT
         };
-        console.log(`PATH-SET: Insert data:`, {
+        console.log(`[2025-04-10 11:38:53] PATH-SET: Insert data:`, {
           user_id: newPath.user_id,
           source_coords: `${newPath.source_lat},${newPath.source_lng}`,
           dest_coords: `${newPath.dest_lat},${newPath.dest_lng}`,
@@ -179,284 +199,270 @@ router.post('/set', async (req, res) => {
           .select('id, user_id, created_at');
         
         if (error) {
-          console.error('PATH-SET ERROR: Failed to insert path:', error);
-          return res.status(500).json({ message: 'Error inserting path', error });
+          console.error('[2025-04-10 11:38:53] PATH-SET ERROR: Failed to insert path:', error);
+          return res.status(500).json({ 
+            success: false,
+            message: 'Error inserting path', 
+            error 
+          });
         }
         
         if (data && data.length > 0) {
           pathId = data[0].id;
-          console.log(`PATH-SET: Successfully created path with ID: ${pathId}`);
-          console.log(`PATH-SET: New path details:`, data[0]);
+          console.log(`[2025-04-10 11:38:53] PATH-SET: Successfully created path with ID: ${pathId}`);
+          console.log(`[2025-04-10 11:38:53] PATH-SET: New path details:`, data[0]);
           
           // THIRD: Try to update the geometry column
           try {
-            console.log(`PATH-SET: Updating geometry for path ${pathId}...`);
-            // Raw SQL approach for updating geometry - more reliable than RPC with type issues
+            console.log(`[2025-04-10 11:38:53] PATH-SET: Updating geometry for path ${pathId}...`);
             const { error: updateError } = await databaseClient.rpc(
               'update_geometry_for_path',
               { 
-                path_id: pathId,
+                path_id: pathId, 
                 wkt_data: routeWKT
               }
             );
             
             if (updateError) {
-              console.warn('PATH-SET WARNING: Could not update geometry column:', updateError);
-              console.log('PATH-SET: Path saved without geometry column, spatial queries may not work');
+              console.warn('[2025-04-10 11:38:53] PATH-SET WARNING: Could not update geometry column:', updateError);
+              console.log('[2025-04-10 11:38:53] PATH-SET: Path saved without geometry column, spatial queries may not work');
             } else {
-              console.log('PATH-SET: Successfully updated geometry column');
+              console.log('[2025-04-10 11:38:53] PATH-SET: Successfully updated geometry column');
             }
           } catch (geomError) {
-            console.warn('PATH-SET WARNING: Exception updating geometry:', geomError);
-            console.log('PATH-SET: Path saved without geometry column, spatial queries may not work');
-          }
+            console.warn('[2025-04-10 11:38:53] PATH-SET WARNING: Exception updating geometry:', geomError);
+            console.log('[2025-04-10 11:38:53] PATH-SET: Path saved without geometry column, spatial queries may not work');
+          } 
         } else {
-          console.log(`PATH-SET WARNING: Insert returned no data`);
+          console.log(`[2025-04-10 11:38:53] PATH-SET WARNING: Insert returned no data`);
         }
       } catch (insertError) {
-        console.error(`PATH-SET ERROR: Exception inserting path:`, insertError);
-        return res.status(500).json({ message: 'Error inserting path', error: insertError.message });
+        console.error(`[2025-04-10 11:38:53] PATH-SET ERROR: Exception inserting path:`, insertError);
+        return res.status(500).json({ 
+          success: false,
+          message: 'Error inserting path', 
+          error: insertError.message 
+        });
       }
     } else {
       // Using fallback database
-      console.log(`PATH-SET: Using fallback database`);
+      console.log(`[2025-04-10 11:38:53] PATH-SET: Using fallback database`);
       databaseClient.deleteUserRoutes(userId);
-      console.log(`PATH-SET: Deleted existing paths for user ${userId} in fallback DB`);
+      console.log(`[2025-04-10 11:38:53] PATH-SET: Deleted existing paths for user ${userId} in fallback DB`);
       
       const pathData = databaseClient.addRoute(userId, source, destination, routeWKT);
       if (pathData && pathData.id) {
         pathId = pathData.id;
-        console.log(`PATH-SET: Created path with ID: ${pathId} in fallback DB`);
+        console.log(`[2025-04-10 11:38:53] PATH-SET: Created path with ID: ${pathId} in fallback DB`);
       }
     }
     
     const endTime = new Date();
     const duration = endTime - startTime;
-    console.log(`[${endTime.toISOString()}] PATH-SET: Request completed in ${duration}ms`);
+    console.log(`[2025-04-10 11:38:53] PATH-SET: Request completed in ${duration}ms`);
     
     res.json({
+      success: true,
       message: 'Path stored successfully',
       pathId: pathId,
       routeWKT: routeWKT.substring(0, 100) + '...' // Truncate for response size
     });
   } catch (error) {
-    console.error('PATH-SET ERROR: Exception in path creation:', error);
+    console.error('[2025-04-10 11:38:53] PATH-SET ERROR: Exception in path creation:', error);
     res.status(500).json({ 
+      success: false,
       message: 'Internal server error', 
       error: error.message
     });
   }
 });
 
-// Helper function to check if two paths intersect (JavaScript implementation)
-const doPathsIntersect = (path1, path2) => {
-  try {
-    // Parse LINESTRING format to arrays of points
-    const getPoints = (pathStr) => {
-      if (!pathStr || !pathStr.startsWith('LINESTRING')) return [];
-      const coordsStr = pathStr.substring(pathStr.indexOf('(') + 1, pathStr.lastIndexOf(')'));
-      return coordsStr.split(',').map(pair => {
-        const [lng, lat] = pair.trim().split(' ').map(parseFloat);
-        return [lng, lat];
-      });
-    };
-    
-    // Check if line segments intersect
-    const segmentsIntersect = (p1, p2, p3, p4) => {
-      // Line 1 represented as a1x + b1y = c1
-      const a1 = p2[1] - p1[1];
-      const b1 = p1[0] - p2[0];
-      const c1 = a1 * p1[0] + b1 * p1[1];
-      
-      // Line 2 represented as a2x + b2y = c2
-      const a2 = p4[1] - p3[1];
-      const b2 = p3[0] - p4[0];
-      const c2 = a2 * p3[0] + b2 * p3[1];
-      
-      const determinant = a1 * b2 - a2 * b1;
-      
-      if (determinant === 0) return false; // Parallel lines
-      
-      const x = (b2 * c1 - b1 * c2) / determinant;
-      const y = (a1 * c2 - a2 * c1) / determinant;
-      
-      // Check if intersection point is within both line segments
-      return (
-        x >= Math.min(p1[0], p2[0]) && x <= Math.max(p1[0], p2[0]) &&
-        y >= Math.min(p1[1], p2[1]) && y <= Math.max(p1[1], p2[1]) &&
-        x >= Math.min(p3[0], p4[0]) && x <= Math.max(p3[0], p4[0]) &&
-        y >= Math.min(p3[1], p4[1]) && y <= Math.max(p3[1], p4[1])
-      );
-    };
-    
-    const points1 = getPoints(path1);
-    const points2 = getPoints(path2);
-    
-    if (points1.length < 2 || points2.length < 2) return false;
-    
-    // Check each segment in path1 against each segment in path2
-    for (let i = 0; i < points1.length - 1; i++) {
-      for (let j = 0; j < points2.length - 1; j++) {
-        if (segmentsIntersect(points1[i], points1[i+1], points2[j], points2[j+1])) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('Error checking path intersection:', error);
-    return false;
-  }
-};
-
-// GET /api/path/live - Returns paths with intersection filtering using PostGIS
-// GET /api/path/live - Returns paths with intersection filtering using PostgreSQL/PostGIS
-// GET /api/path/live - Returns paths with intersection filtering
-// GET /api/path/live - Returns only current user path and intersecting paths
-// GET /api/path/live - Enhanced logging and robust path retrieval
-// GET /api/path/live - Complete rewrite with better error handling and debugging
-// GET /api/path/live - Enhanced with debugging for path retrieval
-// GET /api/path/live - Direct path retrieval with enhanced logging
-// GET /api/path/live - Returns paths with intersection filtering
-// GET /api/path/live - Enhanced with better error handling and test data generation
+// GET /api/path/live - Returns ONLY current user's path and users along it
 router.get('/live', async (req, res) => {
-  console.log('===================== PATH LIVE API =====================');
-  
+  const startTime = new Date();
   try {
+    // Add artificial delay as requested
+    await addDelay(1500);
+
+    // Validate user data first
+    const { isValid, missingFields } = validateUserData(req.user);
+    if (!isValid) {
+      console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Missing user data: ${missingFields.join(', ')}`);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Your profile is incomplete. Please log out and log in again.' 
+      });
+    }
+
     const currentUserId = req.user.id;
-    const { intersectOnly = 'true' } = req.query;
+    const username = req.user.username; // Validated above
     
-    console.log(`Path API: User ${currentUserId} requested paths`);
-    console.log(`Path API: Filter by intersection: ${intersectOnly}`);
+    // Parse query parameters
+    const { proximityRadius = '500', intersectOnly = 'false' } = req.query;
+    const radiusValue = parseFloat(proximityRadius);
     
-    let allPaths = [];
+    // We're ignoring intersectOnly parameter as per your request - only showing current user's path
+    console.log(`[2025-04-10 11:38:53] PATH-LIVE: Request from user ${username} (${currentUserId})`);
+    console.log(`[2025-04-10 11:38:53] PATH-LIVE: Looking for user's path with proximity radius ${radiusValue}m`);
     
-    // First attempt: Try to get real paths from the database
-    try {
-      // Set time window (last 60 minutes for better testing)
-      const timeWindow = new Date();
-      timeWindow.setMinutes(timeWindow.getMinutes() - 60);
-      
-      console.log(`Path API: Querying for paths since ${timeWindow.toISOString()}`);
-      const { data: pathsData, error: pathsError } = await databaseClient
-        .from('commute_routes')
-        .select(`
-          id,
-          user_id,
-          created_at,
-          source_lat,
-          source_lng,
-          dest_lat,
-          dest_lng,
-          route_wkt
-        `)
-        .gt('created_at', timeWindow.toISOString());
-      
-      if (pathsError) {
-        console.error('Path API Error: Failed to fetch paths:', pathsError);
-      } else if (pathsData && pathsData.length > 0) {
-        console.log(`Path API: Found ${pathsData.length} paths in database`);
+    let currentUserPath = null;
+    let usersAlongPath = [];
+    
+    // Try using Supabase if available
+    if (databaseClient && typeof databaseClient.from === 'function') {
+      try {
+        // STEP 1: Get ONLY the current user's path
+        const { data: pathData, error: pathError } = await databaseClient
+          .from('commute_routes')
+          .select(`
+            id, 
+            user_id,
+            created_at,
+            source_lat,
+            source_lng,
+            dest_lat,
+            dest_lng,
+            route_wkt
+          `)
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(1);
         
-        // Map paths to the expected format
-        allPaths = pathsData.map(path => ({
-          id: path.id,
-          user_id: path.user_id,
-          username: path.user_id === currentUserId ? 'You' : 'Other User',
-          created_at: path.created_at,
-          route: path.route_wkt,
-          intersects_with_user: path.user_id === currentUserId,
+        if (pathError) {
+          console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Failed to fetch path:`, pathError);
+          throw pathError;
+        }
+        
+        if (!pathData || pathData.length === 0) {
+          console.log(`[2025-04-10 11:38:53] PATH-LIVE: No path found for user ${username} (${currentUserId})`);
+          
+          // No path found - return empty data
+          return res.json({
+            success: true,
+            status: 'no_path',
+            message: 'No path found for current user. Create a route first.',
+            data: [],
+            usersAlongPath: [],
+            proximityRadius: radiusValue,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Found a path - format it for the frontend
+        currentUserPath = {
+          id: pathData[0].id,
+          user_id: pathData[0].user_id,
+          username: 'You', // Always "You" for current user's path
+          created_at: pathData[0].created_at,
+          route: pathData[0].route_wkt,
           source: {
-            lat: path.source_lat,
-            lng: path.source_lng
+            lat: pathData[0].source_lat,
+            lng: pathData[0].source_lng
           },
           destination: {
-            lat: path.dest_lat,
-            lng: path.dest_lng
+            lat: pathData[0].dest_lat,
+            lng: pathData[0].dest_lng
           }
-        }));
+        };
         
-        // Log the first path details for debugging
-        if (allPaths.length > 0) {
-          const samplePath = allPaths[0];
-          console.log(`Path API: Sample path - ID: ${samplePath.id}, User: ${samplePath.username}`);
-          console.log(`Path API: Route exists: ${!!samplePath.route}, Length: ${samplePath.route ? samplePath.route.length : 0}`);
+        console.log(`[2025-04-10 11:38:53] PATH-LIVE: Found user's path ID: ${currentUserPath.id}`);
+        
+        // STEP 2: Find users along this path using PostGIS
+        try {
+          console.log(`[2025-04-10 11:38:53] PATH-LIVE: Finding users along path ${currentUserPath.id} with radius ${radiusValue}m`);
+          
+          // Call the stored procedure to find users along path
+          const { data: usersData, error: usersError } = await databaseClient.rpc(
+            'find_users_along_path',
+            { 
+              path_id: currentUserPath.id,
+              distance_meters: radiusValue,
+              exclude_user_id: currentUserId
+            }
+          );
+          
+          if (usersError) {
+            console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Failed to find users along path:`, usersError);
+            // Continue with empty users - not a critical error
+          } else if (usersData && usersData.length > 0) {
+            console.log(`[2025-04-10 11:38:53] PATH-LIVE: Found ${usersData.length} users along the path`);
+            usersAlongPath = usersData;
+          } else {
+            console.log(`[2025-04-10 11:38:53] PATH-LIVE: No users found along the path`);
+          }
+        } catch (usersError) {
+          console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Exception finding users along path:`, usersError);
+          // Continue with empty users - not a critical error
         }
-      } else {
-        console.log(`Path API: No paths found in database`);
+      } catch (dbError) {
+        console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Database error:`, dbError);
+        throw dbError;
       }
-    } catch (e) {
-      console.error('Path API Error: Exception querying paths:', e);
+    } else {
+      // Fallback for memory database
+      console.log(`[2025-04-10 11:38:53] PATH-LIVE: Using fallback database`);
+      
+      try {
+        // In memory implementation - should only return current user's path
+        const path = databaseClient.getUserRoute(currentUserId);
+        if (path) {
+          currentUserPath = {
+            id: path.id,
+            user_id: path.user_id,
+            username: 'You',
+            created_at: path.created_at,
+            route: path.route_wkt,
+            source: path.source,
+            destination: path.destination
+          };
+          
+          // Find nearby users
+          usersAlongPath = databaseClient.getUsersNearPath(path.id, radiusValue, currentUserId);
+        }
+      } catch (memoryError) {
+        console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Memory DB error:`, memoryError);
+      }
     }
     
-    // If no paths were found, generate test data
-    if (allPaths.length === 0) {
-      console.log('Path API: No paths found in database, generating test data');
-      
-      // Generate a test path for the current user
-      const userTestPath = {
-        id: 'test-user-path',
-        user_id: currentUserId,
-        username: 'You',
-        created_at: new Date().toISOString(),
-        route: `LINESTRING(${req.user.longitude || 72.505} ${req.user.latitude || 27.145}, ${parseFloat(req.user.longitude || 72.505) + 0.015} ${parseFloat(req.user.latitude || 27.145) + 0.01})`,
-        intersects_with_user: false,
-        source: {
-          lat: req.user.latitude || 27.145,
-          lng: req.user.longitude || 72.505
-        },
-        destination: {
-          lat: parseFloat(req.user.latitude || 27.145) + 0.01,
-          lng: parseFloat(req.user.longitude || 72.505) + 0.015
-        }
-      };
-      
-      // Generate an intersecting test path
-      const intersectingTestPath = {
-        id: 'test-intersect-path',
-        user_id: 'test-other-user',
-        username: 'Test User',
-        created_at: new Date().toISOString(),
-        route: `LINESTRING(${parseFloat(req.user.longitude || 72.505) + 0.01} ${parseFloat(req.user.latitude || 27.145) - 0.005}, ${parseFloat(req.user.longitude || 72.505) + 0.01} ${parseFloat(req.user.latitude || 27.145) + 0.015})`,
-        intersects_with_user: true,
-        source: {
-          lat: parseFloat(req.user.latitude || 27.145) - 0.005,
-          lng: parseFloat(req.user.longitude || 72.505) + 0.01
-        },
-        destination: {
-          lat: parseFloat(req.user.latitude || 27.145) + 0.015,
-          lng: parseFloat(req.user.longitude || 72.505) + 0.01
-        }
-      };
-      
-      allPaths = [userTestPath, intersectingTestPath];
-      console.log('Path API: Added test paths:', allPaths.length);
-    }
-    
-    // Final check - verify all paths have route data
-    allPaths.forEach((path, index) => {
-      if (!path.route) {
-        console.log(`Path API: WARNING - Path ${index} (ID: ${path.id}) has no route data!`);
-      }
-    });
-    
-    console.log(`Path API: Returning ${allPaths.length} paths`);
-    
-    // Return paths in the format expected by the frontend
-    res.json({
+    // Prepare result - ONLY current user's path and users along it
+    const result = {
+      success: true,
       status: 'success',
-      data: allPaths,
-      intersectionFilterActive: intersectOnly === 'true',
+      data: currentUserPath ? [currentUserPath] : [], // Return array with ONLY the current user's path
+      usersAlongPath: usersAlongPath || [],
+      proximityRadius: radiusValue,
       timestamp: new Date().toISOString()
-    });
+    };
     
-    console.log('===================== PATH API COMPLETE =====================');
+    const endTime = new Date();
+    const duration = endTime - startTime;
+    console.log(`[2025-04-10 11:38:53] PATH-LIVE: Request completed in ${duration}ms`);
+    console.log(`[2025-04-10 11:38:53] PATH-LIVE: Returning 1 path and ${usersAlongPath.length} users along path`);
+    
+    return res.json(result);
   } catch (error) {
-    console.error('Path API Error: Unhandled exception:', error);
+    console.error(`[2025-04-10 11:38:53] PATH-LIVE ERROR: Unhandled exception:`, error);
     res.status(500).json({ 
+      success: false,
       message: 'Internal server error', 
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
+
+// Helper function to validate user has required fields
+const validateUserData = (user, requiredFields = ['id', 'username']) => {
+  if (!user) return { isValid: false, missingFields: ['user object'] };
+  
+  const missingFields = requiredFields.filter(field => {
+    return !user[field];
+  });
+  
+  return {
+    isValid: missingFields.length === 0,
+    missingFields
+  };
+};
+
 module.exports = router;
